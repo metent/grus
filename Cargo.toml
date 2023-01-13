@@ -1,0 +1,22 @@
+[package]
+name = "grus"
+version = "0.1.0"
+authors = ["Rishabh Das <rdas@tutanota.com>"]
+edition = "2021"
+description = "A hierarchical task manager for the terminal"
+license = "MIT"
+repository = "https://github.com/metent/grus"
+keywords = ["tui", "productivity", "todo", "todo-list", "tree"]
+categories = ["command-line-utilities"]
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+bincode = "1.3.3"
+chrono = { version = "0.4.23", features = ["serde"] }
+crossterm = "0.25.0"
+dirs = "4.0.0"
+fuzzydate = "0.2.0"
+sanakirja = "1.2.16"
+serde = { version = "1.0.152", features = ["derive"] }
+thiserror = "1.0.38"
