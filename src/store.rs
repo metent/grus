@@ -133,8 +133,12 @@ impl<'env> StoreWriter<'env> {
 	}
 
 	pub fn delete(&mut self, pid: u64, id: u64) -> Result<(), Error> {
-		while let Some((_, &child_id)) = btree::get(&self.txn, &self.links, &id, None)? {
-			self.delete(id, child_id)?;
+		while let Some((&eid, &child_id)) = btree::get(&self.txn, &self.links, &id, None)? {
+			if eid == id {
+				self.delete(id, child_id)?;
+			} else {
+				break;
+			}
 		}
 		btree::del(&mut self.txn, &mut self.nodes, &id, None)?;
 		btree::del(&mut self.txn, &mut self.links, &pid, Some(&id))?;
