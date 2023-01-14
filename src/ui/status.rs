@@ -5,36 +5,20 @@ use crossterm::style::{Color, Print, PrintStyledContent, Stylize};
 use super::{BufPrint, Screen};
 
 pub struct StatusView {
-	line: String,
+	pub command: String,
 	title: &'static str,
 }
 
 impl StatusView {
 	pub fn new() -> Self {
 		StatusView {
-			line: String::new(),
+			command: String::new(),
 			title: "",
 		}
 	}
 
 	pub fn set_title(&mut self, title: &'static str) {
 		self.title = title;
-	}
-
-	pub fn pushc(&mut self, c: char) {
-		self.line.push(c);
-	}
-
-	pub fn back(&mut self) {
-		self.line.pop();
-	}
-
-	pub fn clear(&mut self) {
-		self.line.clear();
-	}
-
-	pub fn get_command(&self) -> &str {
-		&self.line
 	}
 }
 
@@ -43,7 +27,7 @@ impl BufPrint<StatusView> for Screen {
 		self.stdout
 			.queue(MoveTo(self.constr.status.x, self.constr.status.y))?
 			.queue(Print(view.title))?
-			.queue(Print(view.line.clone()))?
+			.queue(Print(&view.command))?
 			.queue(PrintStyledContent(" ".on(Color::White)))?;
 
 		Ok(self)

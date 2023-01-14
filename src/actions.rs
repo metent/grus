@@ -20,10 +20,15 @@ pub trait Actions {
 
 impl Actions for Application {
 	fn enter_command_mode(&mut self, cmd: CommandType) {
+		let Some(sel_node) = self.tree_view.sel_node() else { return };
+
 		self.mode = Mode::Command(cmd);
 		let title = match cmd {
 			CommandType::AddChild => "add: ",
-			CommandType::Rename => "rename: ",
+			CommandType::Rename => {
+				self.status_view.command.push_str(&sel_node.data.name);
+				"rename: "
+			}
 			CommandType::SetDueDate => "due date: ",
 		};
 		self.status_view.set_title(title);
@@ -32,7 +37,7 @@ impl Actions for Application {
 	fn add_child(&mut self) -> Result<(), Error> {
 		let Some(sel_node) = self.tree_view.sel_node() else { return Ok(()) };
 
-		let name = self.status_view.get_command();
+		let name = &self.status_view.command;
 		let data = bincode::serialize(&NodeData::with_name(name))?;
 
 		let mut writer = self.store.writer()?;
@@ -64,7 +69,7 @@ impl Actions for Application {
 		let original = bincode::deserialize(reader.read(sel_node.id)?.unwrap())?;
 		drop(reader);
 
-		let name = self.status_view.get_command();
+		let name = &self.status_view.command;
 		let data = bincode::serialize(&NodeData { name: name.into(), ..original })?;
 
 		let mut writer = self.store.writer()?;
@@ -103,7 +108,7 @@ impl Actions for Application {
 		let original = bincode::deserialize(reader.read(sel_node.id)?.unwrap())?;
 		drop(reader);
 
-		let Ok(due_date) = fuzzydate::parse(self.status_view.get_command()) else {
+		let Ok(due_date) = fuzzydate::parse(&self.status_view.command) else {
 			return Ok(());
 		};
 		let data = bincode::serialize(&NodeData { due_date: Some(due_date), ..original })?;
@@ -156,7 +161,7 @@ impl Actions for Application {
 	}
 
 	fn cancel(&mut self) {
-		self.status_view.clear();
+		self.status_view.command.clear();
 		self.mode = Mode::Normal;
 	}
 

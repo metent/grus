@@ -63,8 +63,8 @@ impl Application {
 								CommandType::SetDueDate => self.set_due_date()?,
 							}
 						}
-						KeyCode::Char(c) => self.status_view.pushc(c),
-						KeyCode::Backspace => self.status_view.back(),
+						KeyCode::Char(c) => self.status_view.command.push(c),
+						KeyCode::Backspace => _ = self.status_view.command.pop(),
 						KeyCode::Esc => self.cancel(),
 						_ => {},
 					}
