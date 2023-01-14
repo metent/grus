@@ -39,10 +39,7 @@ impl Actions for Application {
 		writer.add_child(sel_node.id, &data)?;
 		writer.commit()?;
 
-		let height = self.screen.tree_height().into();
-		let width = self.screen.tree_width().into();
-		let flattree = build_flattree(self.root_id, &self.store, height, width)?;
-		self.tree_view.reset(flattree, SelRetention::Stay);
+		self.update_tree_view(SelRetention::Stay)?;
 
 		self.cancel();
 		Ok(())
@@ -56,10 +53,7 @@ impl Actions for Application {
 		writer.delete(sel_node.pid, sel_node.id)?;
 		writer.commit()?;
 
-		let height = self.screen.tree_height().into();
-		let width = self.screen.tree_width().into();
-		let flattree = build_flattree(self.root_id, &self.store, height, width)?;
-		self.tree_view.reset(flattree, SelRetention::MoveUp);
+		self.update_tree_view(SelRetention::MoveUp)?;
 		Ok(())
 	}
 
@@ -77,10 +71,7 @@ impl Actions for Application {
 		writer.modify(sel_node.id, &data)?;
 		writer.commit()?;
 
-		let height = self.screen.tree_height().into();
-		let width = self.screen.tree_width().into();
-		let flattree = build_flattree(self.root_id, &self.store, height, width)?;
-		self.tree_view.reset(flattree, SelRetention::SameId);
+		self.update_tree_view(SelRetention::SameId)?;
 
 		self.cancel();
 		Ok(())
@@ -99,10 +90,7 @@ impl Actions for Application {
 		writer.modify(sel_node.id, &data)?;
 		writer.commit()?;
 
-		let height = self.screen.tree_height().into();
-		let width = self.screen.tree_width().into();
-		let flattree = build_flattree(self.root_id, &self.store, height, width)?;
-		self.tree_view.reset(flattree, SelRetention::SameId);
+		self.update_tree_view(SelRetention::SameId)?;
 
 		self.cancel();
 		Ok(())
@@ -124,10 +112,7 @@ impl Actions for Application {
 		writer.modify(sel_node.id, &data)?;
 		writer.commit()?;
 
-		let height = self.screen.tree_height().into();
-		let width = self.screen.tree_width().into();
-		let flattree = build_flattree(self.root_id, &self.store, height, width)?;
-		self.tree_view.reset(flattree, SelRetention::SameId);
+		self.update_tree_view(SelRetention::SameId)?;
 
 		self.cancel();
 		Ok(())
@@ -146,10 +131,7 @@ impl Actions for Application {
 		writer.modify(sel_node.id, &data)?;
 		writer.commit()?;
 
-		let height = self.screen.tree_height().into();
-		let width = self.screen.tree_width().into();
-		let flattree = build_flattree(self.root_id, &self.store, height, width)?;
-		self.tree_view.reset(flattree, SelRetention::SameId);
+		self.update_tree_view(SelRetention::SameId)?;
 		Ok(())
 	}
 
@@ -161,10 +143,7 @@ impl Actions for Application {
 		self.stack.push(self.root_id);
 		self.root_id = sel_node.id;
 
-		let height = self.screen.tree_height().into();
-		let width = self.screen.tree_width().into();
-		let flattree = build_flattree(sel_node.id, &self.store, height, width)?;
-		self.tree_view.reset(flattree, SelRetention::Reset);
+		self.update_tree_view(SelRetention::Reset)?;
 		Ok(())
 	}
 
@@ -172,10 +151,7 @@ impl Actions for Application {
 		let Some(root_id) = self.stack.pop() else { return Ok(()) };
 		self.root_id = root_id;
 
-		let height = self.screen.tree_height().into();
-		let width = self.screen.tree_width().into();
-		let flattree = build_flattree(root_id, &self.store, height, width)?;
-		self.tree_view.reset(flattree, SelRetention::Reset);
+		self.update_tree_view(SelRetention::Reset)?;
 		Ok(())
 	}
 
@@ -186,10 +162,21 @@ impl Actions for Application {
 
 	fn resize(&mut self, width: u16, height: u16) -> Result<(), Error> {
 		self.screen.update(width, height);
+		self.update_tree_view(SelRetention::SameId)?;
+		Ok(())
+	}
+}
+
+trait Update {
+	fn update_tree_view(&mut self, ret: SelRetention) -> Result<(), Error>;
+}
+
+impl Update for Application {
+	fn update_tree_view(&mut self, ret: SelRetention) -> Result<(), Error> {
 		let height = self.screen.tree_height().into();
 		let width = self.screen.tree_width().into();
 		let flattree = build_flattree(self.root_id, &self.store, height, width)?;
-		self.tree_view.reset(flattree, SelRetention::SameId);
+		self.tree_view.reset(flattree, ret);
 		Ok(())
 	}
 }
