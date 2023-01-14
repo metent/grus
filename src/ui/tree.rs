@@ -70,69 +70,70 @@ impl BufPrint<TreeView> for Screen {
 	fn bufprint(&mut self, view: &TreeView) -> io::Result<&mut Self> {
 		let Some(sel_node) = view.sel_node() else { return Ok(self) };
 		let sel_h = view.flattree.iter().enumerate().take_while(|&(i, _)| i < view.sel)
-			.fold(0, |acc, (_, node)| acc + node.splits.len() - 1);
-		for i in 0..sel_node.splits.len() - 1 {
-			for x in self.constr.tasks.x..self.constr.tasks.x + self.constr.tasks.w + self.constr.priority.w + self.constr.due_date.w + 2 {
-				self.stdout
-					.queue(MoveTo(x, self.constr.tasks.y + sel_h as u16 + i as u16))?
-					.queue(SetColors(Colors::new(Color::Black, Color::White)))?
-					.queue(Print(' '))?
-					.queue(ResetColor)?;
-			}
-		}
+			.fold(0, |acc, (_, task)| acc + task.height());
+		self.paint(
+			self.constr.tasks.x,
+			self.constr.tasks.y + sel_h as u16,
+			self.constr.tasks.w + self.constr.priority.w + self.constr.due_date.w + 2,
+			sel_node.splits.len() as u16 - 1
+		)?;
 
 		let mut h = 0;
 		for (i, task) in view.flattree.iter().enumerate() {
 			if i == view.sel {
-				self.stdout
-					.queue(SetColors(Colors::new(Color::Black, Color::White)))?
-					.queue(MoveTo(
-						self.constr.priority.x,
-						self.constr.priority.y + h
-					))?
-					.queue(Print(task.data.priority))?
-					.queue(MoveTo(
-						self.constr.due_date.x,
-						self.constr.due_date.y + h
-					))?
-					.queue(Print(Displayable(task.data.due_date)))?;
-
-				for split in task.splits.windows(2).map(|w| &task.data.name[w[0]..w[1]]) {
-					self.stdout
-						.queue(MoveTo(
-							self.constr.tasks.x + 2 * task.depth as u16,
-							self.constr.tasks.y + h
-						))?
-						.queue(Print(split))?;
-					h += 1;
-				}
-
-				self.stdout.queue(ResetColor)?;
+				self.print_sel_task(task, h)?;
 			} else {
-				self.stdout
-					.queue(MoveTo(
-						self.constr.priority.x,
-						self.constr.priority.y + h
-					))?
-					.queue(Print(task.data.priority))?
-					.queue(MoveTo(
-						self.constr.due_date.x,
-						self.constr.due_date.y + h
-					))?
-					.queue(Print(Displayable(task.data.due_date)))?;
-
-				for split in task.splits.windows(2).map(|w| &task.data.name[w[0]..w[1]]) {
-					self.stdout
-						.queue(MoveTo(
-							self.constr.tasks.x + 2 * task.depth as u16,
-							self.constr.tasks.y + h
-						))?
-						.queue(Print(split))?;
-					h += 1;
-				}
+				self.print_task(task, h)?;
 			}
+			h += task.height();
 		}
 
 		return Ok(self);
+	}
+}
+
+trait PrintTask {
+	fn print_task(&mut self, task: &Node, dy: u16) -> io::Result<()>;
+	fn print_sel_task(&mut self, task: &Node, dy: u16) -> io::Result<()>;
+}
+
+impl PrintTask for Screen {
+	fn print_task(&mut self, task: &Node, dy: u16) -> io::Result<()> {
+		self.stdout
+			.queue(MoveTo(self.constr.priority.x, self.constr.priority.y + dy))?
+			.queue(Print(task.data.priority))?
+			.queue(MoveTo(self.constr.due_date.x, self.constr.due_date.y + dy))?
+			.queue(Print(Displayable(task.data.due_date)))?;
+
+		for (i, split) in task.splits().enumerate() {
+			self.stdout
+				.queue(MoveTo(
+					self.constr.tasks.x + 2 * task.depth as u16,
+					self.constr.tasks.y + dy + i as u16,
+				))?
+				.queue(Print(split))?;
+		}
+		Ok(())
+	}
+
+	fn print_sel_task(&mut self, task: &Node, dy: u16) -> io::Result<()> {
+		self.stdout
+			.queue(SetColors(Colors::new(Color::Black, Color::White)))?
+			.queue(MoveTo(self.constr.priority.x, self.constr.priority.y + dy))?
+			.queue(Print(task.data.priority))?
+			.queue(MoveTo(self.constr.due_date.x, self.constr.due_date.y + dy))?
+			.queue(Print(Displayable(task.data.due_date)))?;
+
+		for (i, split) in task.splits().enumerate() {
+			self.stdout
+				.queue(MoveTo(
+					self.constr.tasks.x + 2 * task.depth as u16,
+					self.constr.tasks.y + dy + i as u16
+				))?
+				.queue(Print(split))?;
+		}
+
+		self.stdout.queue(ResetColor)?;
+		Ok(())
 	}
 }

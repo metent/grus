@@ -12,6 +12,16 @@ pub struct Node<'a> {
 	pub splits: Vec<usize>,
 }
 
+impl<'a> Node<'a> {
+	pub fn splits(&self) -> impl Iterator<Item = &str> {
+		self.splits.windows(2).map(|w| &self.data.name[w[0]..w[1]])
+	}
+
+	pub fn height(&self) -> u16 {
+		(self.splits.len() - 1) as u16
+	}
+}
+
 #[derive(Serialize, Deserialize)]
 #[cfg_attr(test, derive(Clone, Debug, PartialEq, Default))]
 pub struct NodeData<'a> {

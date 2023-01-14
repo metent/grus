@@ -2,7 +2,9 @@ pub mod status;
 pub mod tree;
 
 use std::io::{self, stdout, Stdout, Write};
-use crossterm::{terminal, ExecutableCommand};
+use crossterm::{terminal, QueueableCommand, ExecutableCommand};
+use crossterm::cursor::MoveTo;
+use crossterm::style::{Color, Colors, Print, ResetColor, SetColors};
 use crossterm::terminal::{Clear, ClearType};
 
 pub struct Screen {
@@ -38,6 +40,17 @@ impl Screen {
 			h: h - 2
 		};
 		self.constr.status = Rect { x: 0, y: h - 1, w, h: 1 };
+	}
+
+	pub fn paint(&mut self, x: u16, y: u16, w: u16, h: u16) -> io::Result<()> {
+		self.stdout.queue(SetColors(Colors::new(Color::Black, Color::White)))?;
+		for y in y..y + h {
+			for x in x..x + w {
+				self.stdout.queue(MoveTo(x, y))?.queue(Print(' '))?;
+			}
+		}
+		self.stdout.queue(ResetColor)?;
+		Ok(())
 	}
 
 	pub fn height(&self) -> u16 {
