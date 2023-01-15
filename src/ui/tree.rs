@@ -88,6 +88,29 @@ impl BufPrint<TreeView> for Screen {
 			h += task.height();
 		}
 
+		let mut line_pos = Vec::new();
+		for task in view.flattree.iter().rev() {
+			h -= task.height();
+			match line_pos.last() {
+				Some(&last) if task.depth < last => {
+					line_pos.pop();
+					if line_pos.last() == Some(&task.depth) {
+						self.print_div_lines(task, h, &line_pos, false)?;
+					} else {
+						line_pos.push(task.depth);
+						self.print_div_lines(task, h, &line_pos, true)?;
+					}
+				}
+				Some(&last) if task.depth == last => {
+					self.print_div_lines(task, h, &line_pos, false)?;
+				}
+				_ => {
+					line_pos.push(task.depth);
+					self.print_div_lines(task, h, &line_pos, true)?;
+				}
+			}
+		}
+
 		return Ok(self);
 	}
 }
@@ -95,6 +118,13 @@ impl BufPrint<TreeView> for Screen {
 trait PrintTask {
 	fn print_task(&mut self, task: &Node, dy: u16) -> io::Result<()>;
 	fn print_sel_task(&mut self, task: &Node, dy: u16) -> io::Result<()>;
+	fn print_div_lines(
+		&mut self,
+		task: &Node,
+		dy: u16,
+		line_pos: &[usize],
+		is_last: bool
+	) -> io::Result<()>;
 }
 
 impl PrintTask for Screen {
@@ -134,6 +164,43 @@ impl PrintTask for Screen {
 		}
 
 		self.stdout.queue(ResetColor)?;
+		Ok(())
+	}
+
+	fn print_div_lines(
+		&mut self,
+		task: &Node,
+		dy: u16,
+		line_pos: &[usize],
+		is_last: bool
+	) -> io::Result<()> {
+		if task.depth == 0 { return Ok(()) };
+		for dy in dy..dy + task.height() {
+			self.stdout.queue(MoveTo(self.constr.tasks.x, self.constr.tasks.y + dy))?;
+			let mut pos_iter = line_pos.iter();
+			let mut pos = pos_iter.next();
+			for d in 1..task.depth {
+				if Some(&d) == pos {
+					self.stdout.queue(Print("│ "))?;
+					pos = pos_iter.next();
+				} else {
+					self.stdout.queue(Print("  "))?;
+				}
+			}
+			if is_last {
+				self.stdout.queue(Print("  "))?;
+			} else {
+				self.stdout.queue(Print("│ "))?;
+			}
+		}
+
+		let dx = 2 * task.depth as u16 - 2;
+		self.stdout.queue(MoveTo(self.constr.tasks.x + dx, self.constr.tasks.y + dy))?;
+		if is_last {
+			self.stdout.queue(Print("└─"))?;
+		} else {
+			self.stdout.queue(Print("├─"))?;
+		}
 		Ok(())
 	}
 }
