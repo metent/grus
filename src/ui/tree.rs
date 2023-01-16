@@ -1,18 +1,20 @@
+use std::collections::HashSet;
 use std::io;
 use crossterm::QueueableCommand;
 use crossterm::cursor::MoveTo;
 use crossterm::style::{Color, Colors, Print, ResetColor, SetColors};
 use crate::node::{Node, Displayable};
-use super::{BufPrint, Screen};
+use super::{BufPrint, Rect, Screen};
 
 pub struct TreeView {
 	flattree: Vec<Node<'static>>,
 	sel: usize,
+	selected: HashSet<u64>,
 }
 
 impl TreeView {
 	pub fn new(flattree: Vec<Node<'static>>) -> Self {
-		TreeView { flattree, sel: 0 }
+		TreeView { flattree, sel: 0, selected: HashSet::new() }
 	}
 
 	pub fn reset(&mut self, flattree: Vec<Node<'static>>, ret: SelRetention) {
@@ -31,6 +33,14 @@ impl TreeView {
 			SelRetention::Reset => self.sel = 0,
 		}
 		self.flattree = flattree;
+	}
+
+	pub fn select(&mut self) {
+		let Some(&Node { id, .. }) = self.sel_node() else { return };
+
+		if !self.selected.insert(id) {
+			self.selected.remove(&id);
+		}
 	}
 
 	pub fn move_sel_up(&mut self) {
@@ -56,7 +66,6 @@ impl TreeView {
 	pub fn is_root_selected(&self) -> bool {
 		self.sel == 0
 	}
-
 }
 
 pub enum SelRetention {
@@ -68,22 +77,36 @@ pub enum SelRetention {
 
 impl BufPrint<TreeView> for Screen {
 	fn bufprint(&mut self, view: &TreeView) -> io::Result<&mut Self> {
-		let Some(sel_node) = view.sel_node() else { return Ok(self) };
-		let sel_h = view.flattree.iter().enumerate().take_while(|&(i, _)| i < view.sel)
-			.fold(0, |acc, (_, task)| acc + task.height());
-		self.paint(
-			self.constr.tasks.x,
-			self.constr.tasks.y + sel_h as u16,
-			self.constr.tasks.w + self.constr.priority.w + self.constr.due_date.w + 2,
-			sel_node.splits.len() as u16 - 1
-		)?;
-
 		let mut h = 0;
 		for (i, task) in view.flattree.iter().enumerate() {
-			if i == view.sel {
-				self.print_sel_task(task, h)?;
-			} else {
-				self.print_task(task, h)?;
+			let area = Rect {
+				x: self.constr.tasks.x,
+				y: self.constr.tasks.y + h as u16,
+				w: self.constr.tasks.w + self.constr.priority.w + self.constr.due_date.w + 2,
+				h: task.height(),
+			};
+
+			match (i == view.sel, view.selected.contains(&task.id)) {
+				(true, true) => self.paint(area, Colors::new(Color::White, Color::Blue))?,
+				(true, false) => self.paint(area, Colors::new(Color::Black, Color::White))?,
+				(false, true) => self.paint(area, Colors::new(Color::White, Color::DarkBlue))?,
+				(false, false) => {},
+			}
+
+			h += task.height();
+		}
+
+		h = 0;
+		for (i, task) in view.flattree.iter().enumerate() {
+			match (i == view.sel, view.selected.contains(&task.id)) {
+				(true, true) =>
+					self.print_sel_task(task, h, Colors::new(Color::White, Color::Blue))?,
+				(true, false) =>
+					self.print_sel_task(task, h, Colors::new(Color::Black, Color::White))?,
+				(false, true) =>
+					self.print_sel_task(task, h, Colors::new(Color::White, Color::DarkBlue))?,
+				(false, false) =>
+					self.print_task(task, h)?,
 			}
 			h += task.height();
 		}
@@ -117,7 +140,7 @@ impl BufPrint<TreeView> for Screen {
 
 trait PrintTask {
 	fn print_task(&mut self, task: &Node, dy: u16) -> io::Result<()>;
-	fn print_sel_task(&mut self, task: &Node, dy: u16) -> io::Result<()>;
+	fn print_sel_task(&mut self, task: &Node, dy: u16, colors: Colors) -> io::Result<()>;
 	fn print_div_lines(
 		&mut self,
 		task: &Node,
@@ -146,9 +169,9 @@ impl PrintTask for Screen {
 		Ok(())
 	}
 
-	fn print_sel_task(&mut self, task: &Node, dy: u16) -> io::Result<()> {
+	fn print_sel_task(&mut self, task: &Node, dy: u16, colors: Colors) -> io::Result<()> {
 		self.stdout
-			.queue(SetColors(Colors::new(Color::Black, Color::White)))?
+			.queue(SetColors(colors))?
 			.queue(MoveTo(self.constr.priority.x, self.constr.priority.y + dy))?
 			.queue(Print(task.data.priority))?
 			.queue(MoveTo(self.constr.due_date.x, self.constr.due_date.y + dy))?

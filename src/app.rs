@@ -44,6 +44,7 @@ impl Application {
 						KeyCode::Char('k') => self.tree_view.move_sel_up(),
 						KeyCode::Char('h') => self.move_out()?,
 						KeyCode::Char('l') => self.move_into()?,
+						KeyCode::Char(' ') => self.tree_view.select(),
 						KeyCode::Char('a') => self.enter_command_mode(CommandType::AddChild),
 						KeyCode::Char('r') => self.enter_command_mode(CommandType::Rename),
 						KeyCode::Char('x') => self.enter_command_mode(CommandType::SetDueDate),
