@@ -1,11 +1,16 @@
 use std::io::{Error as IoError, ErrorKind};
 use std::path::Path;
-use sanakirja::{Commit, Env, Error, MutTxn, RootDb, Txn};
+use sanakirja::{Commit, Env, Error, MutTxn, RootDb, Storable, Txn};
 use sanakirja::btree::{self, Db, UDb};
+
+type LinksDb = Db<u64, u64>;
+type RLinksDb = Db<u64, RPair>;
+type NodesDb = UDb<u64, [u8]>;
 
 const ID_SQ: usize = 0;
 const DB_LINKS: usize = 1;
-const DB_NODES: usize = 2;
+const DB_RLINKS: usize = 2;
+const DB_NODES: usize = 3;
 
 pub struct Store {
 	env: Env
@@ -24,40 +29,44 @@ impl Store {
 
 	pub fn reader(&self) -> Result<StoreReader, Error> {
 		let txn = Env::txn_begin(&self.env)?;
-		let links: Db<u64, u64> = txn.root_db(DB_LINKS).ok_or_else(invalid_data_error)?;
-		let nodes: UDb<u64, [u8]> = txn.root_db(DB_NODES).ok_or_else(invalid_data_error)?;
+		let links = txn.root_db(DB_LINKS).ok_or_else(invalid_data_error)?;
+		let nodes = txn.root_db(DB_NODES).ok_or_else(invalid_data_error)?;
 		Ok(StoreReader { txn, links, nodes })
 	}
 
 	pub fn writer(&self) -> Result<StoreWriter, Error> {
 		let txn = Env::mut_txn_begin(&self.env)?;
 		let id = txn.root(ID_SQ).ok_or_else(invalid_data_error)?;
-		let links: Db<u64, u64> = txn.root_db(DB_LINKS).ok_or_else(invalid_data_error)?;
-		let nodes: UDb<u64, [u8]> = txn.root_db(DB_NODES).ok_or_else(invalid_data_error)?;
-		Ok(StoreWriter { txn, id, links, nodes })
+		let links = txn.root_db(DB_LINKS).ok_or_else(invalid_data_error)?;
+		let rlinks = txn.root_db(DB_RLINKS).ok_or_else(invalid_data_error)?;
+		let nodes = txn.root_db(DB_NODES).ok_or_else(invalid_data_error)?;
+		Ok(StoreWriter { txn, id, links, rlinks, nodes })
 	}
 
 	fn create_base(&self, root_data: &[u8]) -> Result<(), Error> {
 		let mut txn = Env::mut_txn_begin(&self.env)?;
 
 		let id = txn.root(ID_SQ);
-		let links: Option<Db<u64, u64>> = txn.root_db(DB_LINKS);
-		let nodes: Option<UDb<u64, [u8]>> = txn.root_db(DB_NODES);
-		match (id, links, nodes) {
-			(Some(_), Some(_), Some(nodes)) => {
+		let links: Option<LinksDb> = txn.root_db(DB_LINKS);
+		let rlinks: Option<RLinksDb> = txn.root_db(DB_RLINKS);
+		let nodes: Option<NodesDb> = txn.root_db(DB_NODES);
+		match (id, links, rlinks, nodes) {
+			(Some(_), Some(_), Some(_), Some(nodes)) => {
 				match btree::get(&txn, &nodes, &0, None)? {
 					Some((&0, _)) => Ok(()),
 					_ => Err(invalid_data_error()),
 				}
 			}
-			(None, None, None) => {
-				let links: Db<u64, u64> = btree::create_db(&mut txn)?;
-				let mut nodes: UDb<u64, [u8]> = btree::create_db_(&mut txn)?;
+			(None, None, None, None) => {
+				let links: LinksDb = btree::create_db(&mut txn)?;
+				let rlinks: RLinksDb = btree::create_db(&mut txn)?;
+				let mut nodes: NodesDb = btree::create_db_(&mut txn)?;
 
 				btree::put(&mut txn, &mut nodes, &0, root_data)?;
 
 				txn.set_root(ID_SQ, 1);
 				txn.set_root(DB_LINKS, links.db);
+				txn.set_root(DB_RLINKS, rlinks.db);
 				txn.set_root(DB_NODES, nodes.db);
 				txn.commit()
 			}
@@ -70,8 +79,8 @@ impl Store {
 
 pub struct StoreReader<'env> {
 	txn: Txn<&'env Env>,
-	links: Db<u64, u64>,
-	nodes: UDb<u64, [u8]>,
+	links: LinksDb,
+	nodes: NodesDb,
 }
 
 impl<'env> StoreReader<'env> {
@@ -120,19 +129,34 @@ impl<'env, 'reader> Iterator for ChildIter<'env, 'reader> {
 pub struct StoreWriter<'env> {
 	txn: MutTxn<&'env Env, ()>,
 	id: u64,
-	links: Db<u64, u64>,
-	nodes: UDb<u64, [u8]>,
+	links: LinksDb,
+	rlinks: RLinksDb,
+	nodes: NodesDb,
 }
 
 impl<'env> StoreWriter<'env> {
 	pub fn add_child(&mut self, pid: u64, data: &[u8]) -> Result<(), Error> {
 		btree::put(&mut self.txn, &mut self.links, &pid, &self.id)?;
+		btree::put(&mut self.txn, &mut self.rlinks, &self.id, &RPair { pid, prio: self.id })?;
 		btree::put(&mut self.txn, &mut self.nodes, &self.id, data)?;
 		self.id += 1;
 		Ok(())
 	}
 
 	pub fn delete(&mut self, pid: u64, id: u64) -> Result<(), Error> {
+		btree::del(&mut self.txn, &mut self.links, &pid, Some(&id))?;
+
+		let (&eid, &rpair) = btree::get(&self.txn, &self.rlinks, &id, Some(&RPair { pid, prio: 0 }))?
+			.ok_or_else(invalid_data_error)?;
+		if eid != id || pid != rpair.pid { return Err(invalid_data_error()) };
+		btree::del(&mut self.txn, &mut self.rlinks, &id, Some(&rpair))?;
+
+		if let Some((&eid, _)) = btree::get(&self.txn, &self.rlinks, &id, None)? {
+			if eid == id { return Ok(()) };
+		}
+
+		btree::del(&mut self.txn, &mut self.nodes, &id, None)?;
+
 		while let Some((&eid, &child_id)) = btree::get(&self.txn, &self.links, &id, None)? {
 			if eid == id {
 				self.delete(id, child_id)?;
@@ -140,8 +164,6 @@ impl<'env> StoreWriter<'env> {
 				break;
 			}
 		}
-		btree::del(&mut self.txn, &mut self.nodes, &id, None)?;
-		btree::del(&mut self.txn, &mut self.links, &pid, Some(&id))?;
 		Ok(())
 	}
 
@@ -154,8 +176,26 @@ impl<'env> StoreWriter<'env> {
 	pub fn commit(mut self) -> Result<(), Error> {
 		self.txn.set_root(ID_SQ, self.id);
 		self.txn.set_root(DB_LINKS, self.links.db);
+		self.txn.set_root(DB_RLINKS, self.rlinks.db);
 		self.txn.set_root(DB_NODES, self.nodes.db);
 		self.txn.commit()
+	}
+}
+
+#[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Copy, Clone)]
+struct RPair {
+	pid: u64,
+	prio: u64,
+}
+
+impl Storable for RPair {
+	type PageReferences = core::iter::Empty<u64>;
+	fn page_references(&self) -> Self::PageReferences {
+		core::iter::empty()
+	}
+
+	fn compare<T>(&self, _: &T, b: &Self) -> core::cmp::Ordering {
+		self.cmp(b)
 	}
 }
 
