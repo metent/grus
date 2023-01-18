@@ -40,11 +40,12 @@ impl Application {
 				Event::Key(kev) => match self.mode {
 					Mode::Normal => match kev.code {
 						KeyCode::Char('q') => break,
-						KeyCode::Char('j') => self.tree_view.move_sel_down(),
-						KeyCode::Char('k') => self.tree_view.move_sel_up(),
-						KeyCode::Char('h') => self.move_out()?,
-						KeyCode::Char('l') => self.move_into()?,
-						KeyCode::Char(' ') => self.tree_view.select(),
+						KeyCode::Char('j') | KeyCode::Down => self.tree_view.cursor_down(),
+						KeyCode::Char('k') | KeyCode::Up => self.tree_view.cursor_up(),
+						KeyCode::Char('h') | KeyCode::Left => self.move_out()?,
+						KeyCode::Char('l') | KeyCode::Right => self.move_into()?,
+						KeyCode::Char(' ') => self.tree_view.toggle(),
+						KeyCode::Char('p') => self.cut()?,
 						KeyCode::Char('a') => self.enter_command_mode(CommandType::AddChild),
 						KeyCode::Char('r') => self.enter_command_mode(CommandType::Rename),
 						KeyCode::Char('x') => self.enter_command_mode(CommandType::SetDueDate),

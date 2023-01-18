@@ -1,5 +1,6 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::io;
+use std::iter;
 use crossterm::QueueableCommand;
 use crossterm::cursor::MoveTo;
 use crossterm::style::{Color, Colors, Print, ResetColor, SetColors};
@@ -8,69 +9,161 @@ use super::{BufPrint, Rect, Screen};
 
 pub struct TreeView {
 	flattree: Vec<Node<'static>>,
-	sel: usize,
-	selected: HashSet<u64>,
+	cursor: usize,
+	selections: HashMap<u64, HashSet<u64>>,
 }
 
 impl TreeView {
 	pub fn new(flattree: Vec<Node<'static>>) -> Self {
-		TreeView { flattree, sel: 0, selected: HashSet::new() }
+		TreeView { flattree, cursor: 0, selections: HashMap::new() }
 	}
 
 	pub fn reset(&mut self, flattree: Vec<Node<'static>>, ret: SelRetention) {
 		match ret {
 			SelRetention::Stay => (),
-			SelRetention::MoveUp => self.sel -= 1,
-			SelRetention::SameId => if let Some(&Node { id, pid, .. }) = self.sel_node() {
-				if let Some(sel) = flattree.iter().position(|node| node.id == id) {
-					self.sel = sel;
-				} else if let Some(sel) = flattree.iter().position(|node| node.pid == pid) {
-					self.sel = sel;
+			SelRetention::Parent => if let Some(&Node { pid, .. }) = self.cursor_node() {
+				if let Some(cursor) = flattree.iter().position(|node| node.id == pid) {
+					self.cursor = cursor;
 				} else {
-					self.sel = 0
+					self.cursor = 0
 				}
 			}
-			SelRetention::Reset => self.sel = 0,
+			SelRetention::SameId => if let Some(&Node { id, pid, .. }) = self.cursor_node() {
+				if let Some(cursor) = flattree.iter().position(|node| node.id == id) {
+					self.cursor = cursor;
+				} else if let Some(cursor) = flattree.iter().position(|node| node.id == pid) {
+					self.cursor = cursor;
+				} else {
+					self.cursor = 0
+				}
+			}
+			SelRetention::Reset => self.cursor = 0,
 		}
 		self.flattree = flattree;
 	}
 
-	pub fn select(&mut self) {
-		let Some(&Node { id, .. }) = self.sel_node() else { return };
+	pub fn toggle(&mut self) {
+		let Some(&Node { id, pid, .. }) = self.cursor_node() else { return };
 
-		if !self.selected.insert(id) {
-			self.selected.remove(&id);
+		if let Some(pids) = self.selections.get_mut(&id) {
+			if !pids.insert(pid) {
+				pids.remove(&pid);
+				if pids.is_empty() {
+					self.selections.remove(&id);
+				}
+			}
+		} else {
+			self.selections.insert(id, HashSet::from([pid]));
 		}
 	}
 
-	pub fn move_sel_up(&mut self) {
-		if self.sel > 0 {
-			self.sel -= 1;
+	pub fn deselect(&mut self) {
+		let Some(&Node { id, pid, .. }) = self.cursor_node() else { return };
+
+		if let Some(pids) = self.selections.get_mut(&id) {
+			pids.remove(&pid);
+			if pids.is_empty() {
+				self.selections.remove(&id);
+			}
 		}
 	}
 
-	pub fn move_sel_down(&mut self) {
-		if self.sel < self.flattree.len() - 1 {
-			self.sel += 1;
+	pub fn clear_selections(&mut self) {
+		self.selections.clear();
+	}
+
+	pub fn cursor_up(&mut self) {
+		if self.cursor > 0 {
+			self.cursor -= 1;
 		}
 	}
 
-	pub fn sel_node(&self) -> Option<&Node> {
+	pub fn cursor_down(&mut self) {
+		if self.cursor < self.flattree.len() - 1 {
+			self.cursor += 1;
+		}
+	}
+
+	pub fn cursor_node(&self) -> Option<&Node> {
 		if self.flattree.len() > 0 {
-			Some(&self.flattree[self.sel])
+			Some(&self.flattree[self.cursor])
 		} else {
 			None
 		}
 	}
 
-	pub fn is_root_selected(&self) -> bool {
-		self.sel == 0
+	pub fn selections(&self) -> impl Iterator<Item = (&u64, &u64)> {
+		if !self.selections.is_empty() {
+			Selections::Actual(self.selections.iter().flat_map(|(id, pids)| pids.iter().zip(iter::repeat(id))))
+		} else if let Some(Node { id, pid, .. }) = self.cursor_node() {
+			Selections::Cursor(iter::once((pid, id)))
+		} else {
+			Selections::Empty(iter::empty())
+		}
+	}
+
+	pub fn selection_ids(&self) -> impl Iterator<Item = &u64> {
+		if !self.selections.is_empty() {
+			SelectionIds::Actual(self.selections.keys())
+		} else if let Some(Node { id, .. }) = self.cursor_node() {
+			SelectionIds::Cursor(iter::once(id))
+		} else {
+			SelectionIds::Empty(iter::empty())
+		}
+	}
+
+	pub fn is_selected(&self, pid: u64, id: u64) -> bool {
+		if let Some(pids) = self.selections.get(&id) {
+			pids.contains(&pid)
+		} else {
+			false
+		}
+	}
+
+	pub fn is_cursor_at_root(&self) -> bool {
+		self.cursor == 0
+	}
+}
+
+pub enum Selections<'s, T: Iterator<Item = (&'s u64, &'s u64)>> {
+	Cursor(iter::Once<(&'s u64, &'s u64)>),
+	Actual(T),
+	Empty(iter::Empty<(&'s u64, &'s u64)>),
+}
+
+impl<'s, T: Iterator<Item = (&'s u64, &'s u64)>> Iterator for Selections<'s, T> {
+	type Item = (&'s u64, &'s u64);
+
+	fn next(&mut self) -> Option<Self::Item> {
+		match self {
+			Selections::Cursor(iter) => iter.next(),
+			Selections::Actual(iter) => iter.next(),
+			Selections::Empty(iter) => iter.next(),
+		}
+	}
+}
+
+pub enum SelectionIds<'s, T: Iterator<Item = &'s u64>> {
+	Cursor(iter::Once<&'s u64>),
+	Actual(T),
+	Empty(iter::Empty<&'s u64>),
+}
+
+impl<'s, T: Iterator<Item = &'s u64>> Iterator for SelectionIds<'s, T> {
+	type Item = &'s u64;
+
+	fn next(&mut self) -> Option<Self::Item> {
+		match self {
+			SelectionIds::Cursor(iter) => iter.next(),
+			SelectionIds::Actual(iter) => iter.next(),
+			SelectionIds::Empty(iter) => iter.next(),
+		}
 	}
 }
 
 pub enum SelRetention {
 	Stay,
-	MoveUp,
+	Parent,
 	SameId,
 	Reset,
 }
@@ -86,7 +179,7 @@ impl BufPrint<TreeView> for Screen {
 				h: task.height(),
 			};
 
-			match (i == view.sel, view.selected.contains(&task.id)) {
+			match (i == view.cursor, view.is_selected(task.pid, task.id)) {
 				(true, true) => self.paint(area, Colors::new(Color::White, Color::Blue))?,
 				(true, false) => self.paint(area, Colors::new(Color::Black, Color::White))?,
 				(false, true) => self.paint(area, Colors::new(Color::White, Color::DarkBlue))?,
@@ -98,7 +191,7 @@ impl BufPrint<TreeView> for Screen {
 
 		h = 0;
 		for (i, task) in view.flattree.iter().enumerate() {
-			match (i == view.sel, view.selected.contains(&task.id)) {
+			match (i == view.cursor, view.is_selected(task.pid, task.id)) {
 				(true, true) =>
 					self.print_sel_task(task, h, Colors::new(Color::White, Color::Blue))?,
 				(true, false) =>

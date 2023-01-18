@@ -135,16 +135,17 @@ pub struct StoreWriter<'env> {
 }
 
 impl<'env> StoreWriter<'env> {
-	pub fn add_child(&mut self, pid: u64, data: &[u8]) -> Result<(), Error> {
-		btree::put(&mut self.txn, &mut self.links, &pid, &self.id)?;
-		btree::put(&mut self.txn, &mut self.rlinks, &self.id, &RPair { pid, prio: self.id })?;
-		btree::put(&mut self.txn, &mut self.nodes, &self.id, data)?;
+	pub fn add_child(&mut self, pid: u64, data: &[u8]) -> Result<u64, Error> {
+		let id = self.id;
+		btree::put(&mut self.txn, &mut self.links, &pid, &id)?;
+		btree::put(&mut self.txn, &mut self.rlinks, &id, &RPair { pid, prio: id })?;
+		btree::put(&mut self.txn, &mut self.nodes, &id, data)?;
 		self.id += 1;
-		Ok(())
+		Ok(id)
 	}
 
 	pub fn delete(&mut self, pid: u64, id: u64) -> Result<(), Error> {
-		btree::del(&mut self.txn, &mut self.links, &pid, Some(&id))?;
+		if !btree::del(&mut self.txn, &mut self.links, &pid, Some(&id))? { return Ok(()) };
 
 		let (&eid, &rpair) = btree::get(&self.txn, &self.rlinks, &id, Some(&RPair { pid, prio: 0 }))?
 			.ok_or_else(invalid_data_error)?;
@@ -173,12 +174,48 @@ impl<'env> StoreWriter<'env> {
 		Ok(())
 	}
 
+	pub fn share(&mut self, src: u64, dest: u64) -> Result<bool, Error> {
+		if self.is_descendent_of(dest, src)? { return Ok(false) };
+		if let Some((&pid, &id)) = btree::get(&self.txn, &self.links, &dest, Some(&src))? {
+			if pid == dest && id == src { return Ok(false) };
+		}
+
+		btree::put(&mut self.txn, &mut self.links, &dest, &src)?;
+		btree::put(&mut self.txn, &mut self.rlinks, &src, &RPair { pid: dest, prio: self.id })?;
+		self.id += 1;
+
+		Ok(true)
+	}
+
+	pub fn cut(&mut self, src_pid: u64, src: u64, dest: u64) -> Result<bool, Error> {
+		if !self.share(src, dest)? { return Ok(false) };
+
+		btree::del(&mut self.txn, &mut self.links, &src_pid, Some(&src))?;
+
+		let (&eid, &rpair) = btree::get(&self.txn, &self.rlinks, &src, Some(&RPair { pid: src_pid, prio: 0 }))?
+			.ok_or_else(invalid_data_error)?;
+		if eid != src || src_pid != rpair.pid { return Err(invalid_data_error()) };
+		btree::del(&mut self.txn, &mut self.rlinks, &src, Some(&rpair))?;
+
+		Ok(true)
+	}
+
 	pub fn commit(mut self) -> Result<(), Error> {
 		self.txn.set_root(ID_SQ, self.id);
 		self.txn.set_root(DB_LINKS, self.links.db);
 		self.txn.set_root(DB_RLINKS, self.rlinks.db);
 		self.txn.set_root(DB_NODES, self.nodes.db);
 		self.txn.commit()
+	}
+
+	fn is_descendent_of(&self, subj: u64, pred: u64) -> Result<bool, Error> {
+		if subj == pred { return Ok(true) };
+		for entry in btree::iter(&self.txn, &self.links, Some((&pred, None)))? {
+			let (&id, &child_id) = entry?;
+			if id != pred { break };
+			if self.is_descendent_of(subj, child_id)? { return Ok(true) };
+		}
+		Ok(false)
 	}
 }
 

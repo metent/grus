@@ -12,6 +12,7 @@ pub trait Actions {
 	fn set_priority(&mut self, priority: Priority) -> Result<(), Error>;
 	fn set_due_date(&mut self) -> Result<(), Error>;
 	fn unset_due_date(&mut self) -> Result<(), Error>;
+	fn cut(&mut self) -> Result<(), Error>;
 	fn move_into(&mut self) -> Result<(), Error>;
 	fn move_out(&mut self) -> Result<(), Error>;
 	fn cancel(&mut self);
@@ -20,13 +21,13 @@ pub trait Actions {
 
 impl Actions for Application {
 	fn enter_command_mode(&mut self, cmd: CommandType) {
-		let Some(sel_node) = self.tree_view.sel_node() else { return };
+		let Some(node) = self.tree_view.cursor_node() else { return };
 
 		self.mode = Mode::Command(cmd);
 		let title = match cmd {
 			CommandType::AddChild => "add: ",
 			CommandType::Rename => {
-				self.status_view.command.push_str(&sel_node.data.name);
+				self.status_view.command.push_str(&node.data.name);
 				"rename: "
 			}
 			CommandType::SetDueDate => "due date: ",
@@ -35,47 +36,55 @@ impl Actions for Application {
 	}
 
 	fn add_child(&mut self) -> Result<(), Error> {
-		let Some(sel_node) = self.tree_view.sel_node() else { return Ok(()) };
+		let mut selections = self.tree_view.selection_ids();
+		let Some(&first) = selections.next() else { return Ok(()) };
 
 		let name = &self.status_view.command;
 		let data = bincode::serialize(&NodeData::with_name(name))?;
 
 		let mut writer = self.store.writer()?;
-		writer.add_child(sel_node.id, &data)?;
+		let id = writer.add_child(first, &data)?;
+
+		for &pid in selections {
+			writer.share(id, pid)?;
+		}
 		writer.commit()?;
 
-		self.update_tree_view(SelRetention::Stay)?;
+		self.tree_view.clear_selections();
+		self.update_tree_view(SelRetention::SameId)?;
 
 		self.cancel();
 		Ok(())
 	}
 
 	fn delete(&mut self) -> Result<(), Error> {
-		let Some(sel_node) = self.tree_view.sel_node() else { return Ok(()) };
-		if self.tree_view.is_root_selected() { return Ok(()) }
+		let Some(node) = self.tree_view.cursor_node() else { return Ok(()) };
+		if self.tree_view.is_cursor_at_root() { return Ok(()) }
 
 		let mut writer = self.store.writer()?;
-		writer.delete(sel_node.pid, sel_node.id)?;
+		writer.delete(node.pid, node.id)?;
 		writer.commit()?;
 
-		self.update_tree_view(SelRetention::MoveUp)?;
+		self.tree_view.deselect();
+		self.update_tree_view(SelRetention::Parent)?;
 		Ok(())
 	}
 
 	fn rename(&mut self) -> Result<(), Error> {
-		let Some(sel_node) = self.tree_view.sel_node() else { return Ok(()) };
-
-		let reader = self.store.reader()?;
-		let original = bincode::deserialize(reader.read(sel_node.id)?.unwrap())?;
-		drop(reader);
-
-		let name = &self.status_view.command;
-		let data = bincode::serialize(&NodeData { name: name.into(), ..original })?;
-
 		let mut writer = self.store.writer()?;
-		writer.modify(sel_node.id, &data)?;
+		for &id in self.tree_view.selection_ids() {
+			let reader = self.store.reader()?;
+			let original = bincode::deserialize(reader.read(id)?.unwrap())?;
+			drop(reader);
+
+			let name = &self.status_view.command;
+			let data = bincode::serialize(&NodeData { name: name.into(), ..original })?;
+
+			writer.modify(id, &data)?;
+		}
 		writer.commit()?;
 
+		self.tree_view.clear_selections();
 		self.update_tree_view(SelRetention::SameId)?;
 
 		self.cancel();
@@ -83,18 +92,19 @@ impl Actions for Application {
 	}
 
 	fn set_priority(&mut self, priority: Priority) -> Result<(), Error> {
-		let Some(sel_node) = self.tree_view.sel_node() else { return Ok(()) };
-
-		let reader = self.store.reader()?;
-		let original = bincode::deserialize(reader.read(sel_node.id)?.unwrap())?;
-		drop(reader);
-
-		let data = bincode::serialize(&NodeData { priority, ..original })?;
-
 		let mut writer = self.store.writer()?;
-		writer.modify(sel_node.id, &data)?;
+		for &id in self.tree_view.selection_ids() {
+			let reader = self.store.reader()?;
+			let original = bincode::deserialize(reader.read(id)?.unwrap())?;
+			drop(reader);
+
+			let data = bincode::serialize(&NodeData { priority, ..original })?;
+
+			writer.modify(id, &data)?;
+		}
 		writer.commit()?;
 
+		self.tree_view.clear_selections();
 		self.update_tree_view(SelRetention::SameId)?;
 
 		self.cancel();
@@ -102,21 +112,22 @@ impl Actions for Application {
 	}
 
 	fn set_due_date(&mut self) -> Result<(), Error> {
-		let Some(sel_node) = self.tree_view.sel_node() else { return Ok(()) };
-
-		let reader = self.store.reader()?;
-		let original = bincode::deserialize(reader.read(sel_node.id)?.unwrap())?;
-		drop(reader);
-
-		let Ok(due_date) = fuzzydate::parse(&self.status_view.command) else {
-			return Ok(());
-		};
-		let data = bincode::serialize(&NodeData { due_date: Some(due_date), ..original })?;
-
 		let mut writer = self.store.writer()?;
-		writer.modify(sel_node.id, &data)?;
+		for &id in self.tree_view.selection_ids() {
+			let reader = self.store.reader()?;
+			let original = bincode::deserialize(reader.read(id)?.unwrap())?;
+			drop(reader);
+
+			let Ok(due_date) = fuzzydate::parse(&self.status_view.command) else {
+				return Ok(());
+			};
+			let data = bincode::serialize(&NodeData { due_date: Some(due_date), ..original })?;
+
+			writer.modify(id, &data)?;
+		}
 		writer.commit()?;
 
+		self.tree_view.clear_selections();
 		self.update_tree_view(SelRetention::SameId)?;
 
 		self.cancel();
@@ -124,29 +135,44 @@ impl Actions for Application {
 	}
 
 	fn unset_due_date(&mut self) -> Result<(), Error> {
-		let Some(sel_node) = self.tree_view.sel_node() else { return Ok(()) };
-
-		let reader = self.store.reader()?;
-		let original = bincode::deserialize(reader.read(sel_node.id)?.unwrap())?;
-		drop(reader);
-
-		let data = bincode::serialize(&NodeData { due_date: None, ..original })?;
-
 		let mut writer = self.store.writer()?;
-		writer.modify(sel_node.id, &data)?;
+		for &id in self.tree_view.selection_ids() {
+			let reader = self.store.reader()?;
+			let original = bincode::deserialize(reader.read(id)?.unwrap())?;
+			drop(reader);
+
+			let data = bincode::serialize(&NodeData { due_date: None, ..original })?;
+
+			writer.modify(id, &data)?;
+		}
 		writer.commit()?;
 
+		self.tree_view.clear_selections();
 		self.update_tree_view(SelRetention::SameId)?;
 		Ok(())
 	}
 
-	fn move_into(&mut self) -> Result<(), Error> {
-		let Some(sel_node) = self.tree_view.sel_node() else { return Ok(()) };
+	fn cut(&mut self) -> Result<(), Error> {
+		let Some(node) = self.tree_view.cursor_node() else { return Ok(()) };
 
-		if self.tree_view.is_root_selected() { return Ok(()) }
+		let mut writer = self.store.writer()?;
+		for (&pid, &id) in self.tree_view.selections() {
+			if !writer.cut(pid, id, node.id)? { return Ok(()) };
+		}
+		writer.commit()?;
+
+		self.tree_view.clear_selections();
+		self.update_tree_view(SelRetention::Stay)?;
+		Ok(())
+	}
+
+	fn move_into(&mut self) -> Result<(), Error> {
+		let Some(node) = self.tree_view.cursor_node() else { return Ok(()) };
+
+		if self.tree_view.is_cursor_at_root() { return Ok(()) }
 
 		self.stack.push(self.root_id);
-		self.root_id = sel_node.id;
+		self.root_id = node.id;
 
 		self.update_tree_view(SelRetention::Reset)?;
 		Ok(())
