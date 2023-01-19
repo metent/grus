@@ -8,7 +8,7 @@ fn add_child() -> Result<(), Error> {
 	test_action("add_child", |mut app| {
 		"one".chars().for_each(|c| app.status_view.command.push(c));
 		app.add_child()?;
-		app.tree_view.move_sel_down();
+		app.tree_view.cursor_down();
 		"two".chars().for_each(|c| app.status_view.command.push(c));
 		app.add_child()?;
 
