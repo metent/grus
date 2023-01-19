@@ -1,9 +1,11 @@
 use std::collections::{HashMap, HashSet};
+use std::collections::hash_map::DefaultHasher;
+use std::hash::Hasher;
 use std::io;
 use std::iter;
 use crossterm::QueueableCommand;
 use crossterm::cursor::MoveTo;
-use crossterm::style::{Color, Colors, Print, ResetColor, SetColors};
+use crossterm::style::{Color, Colors, Print, ResetColor, SetColors, SetForegroundColor};
 use crate::node::{Node, Displayable};
 use super::{BufPrint, Rect, Screen};
 
@@ -190,7 +192,19 @@ impl BufPrint<TreeView> for Screen {
 		}
 
 		h = 0;
+		let mut color_map = HashMap::new();
 		for (i, task) in view.flattree.iter().enumerate() {
+			if let Some(color) = color_map.get_mut(&task.id) {
+				if let Color::White = color {
+					let mut hasher = DefaultHasher::new();
+					hasher.write_u64(task.id);
+					let hash = hasher.finish().to_le_bytes()[0];
+					*color = Color::AnsiValue(hash);
+				}
+			} else {
+				color_map.insert(task.id, Color::White);
+			}
+
 			match (i == view.cursor, view.is_selected(task.pid, task.id)) {
 				(true, true) =>
 					self.print_sel_task(task, h, Colors::new(Color::White, Color::Blue))?,
@@ -207,22 +221,24 @@ impl BufPrint<TreeView> for Screen {
 		let mut line_pos = Vec::new();
 		for task in view.flattree.iter().rev() {
 			h -= task.height();
+
+			let color = *color_map.get(&task.id).unwrap();
 			match line_pos.last() {
 				Some(&last) if task.depth < last => {
 					line_pos.pop();
 					if line_pos.last() == Some(&task.depth) {
-						self.print_div_lines(task, h, &line_pos, false)?;
+						self.print_div_lines(task, h, &line_pos, false, color)?;
 					} else {
 						line_pos.push(task.depth);
-						self.print_div_lines(task, h, &line_pos, true)?;
+						self.print_div_lines(task, h, &line_pos, true, color)?;
 					}
 				}
 				Some(&last) if task.depth == last => {
-					self.print_div_lines(task, h, &line_pos, false)?;
+					self.print_div_lines(task, h, &line_pos, false, color)?;
 				}
 				_ => {
 					line_pos.push(task.depth);
-					self.print_div_lines(task, h, &line_pos, true)?;
+					self.print_div_lines(task, h, &line_pos, true, color)?;
 				}
 			}
 		}
@@ -239,7 +255,8 @@ trait PrintTask {
 		task: &Node,
 		dy: u16,
 		line_pos: &[usize],
-		is_last: bool
+		is_last: bool,
+		color: Color,
 	) -> io::Result<()>;
 }
 
@@ -288,7 +305,8 @@ impl PrintTask for Screen {
 		task: &Node,
 		dy: u16,
 		line_pos: &[usize],
-		is_last: bool
+		is_last: bool,
+		color: Color
 	) -> io::Result<()> {
 		if task.depth == 0 { return Ok(()) };
 		for dy in dy..dy + task.height() {
@@ -311,11 +329,22 @@ impl PrintTask for Screen {
 		}
 
 		let dx = 2 * task.depth as u16 - 2;
-		self.stdout.queue(MoveTo(self.constr.tasks.x + dx, self.constr.tasks.y + dy))?;
-		if is_last {
-			self.stdout.queue(Print("└─"))?;
+		self.stdout
+			.queue(MoveTo(self.constr.tasks.x + dx, self.constr.tasks.y + dy))?;
+		if color != Color::White {
+			self.stdout.queue(SetForegroundColor(color))?;
+			if is_last {
+				self.stdout.queue(Print("┕━"))?;
+			} else {
+				self.stdout.queue(Print("┝━"))?;
+			}
+			self.stdout.queue(ResetColor)?;
 		} else {
-			self.stdout.queue(Print("├─"))?;
+			if is_last {
+				self.stdout.queue(Print("└─"))?;
+			} else {
+				self.stdout.queue(Print("├─"))?;
+			}
 		}
 		Ok(())
 	}
