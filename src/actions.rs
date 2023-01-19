@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use crate::app::{Application, CommandType, Error, Mode};
 use crate::flattree::{FlatTreeBuilder, FlatTreeState};
 use crate::node::{Node, NodeData, Priority, wrap_text};
@@ -226,13 +227,17 @@ pub fn build_flattree(
 	if root_splits.len() - 1 > height { return Ok(Vec::new()) }
 	let root = Node { id, pid: id, data: root_data, depth: 0, splits: root_splits };
 	let mut builder = FlatTreeBuilder::new(root, height);
+	let mut ids = HashSet::new();
 
 	loop {
 		match builder.step() {
 			FlatTreeState::Build => continue,
 			FlatTreeState::Refill => {
 				for i in builder.fill_range() {
-					builder.fill(get_children(builder.id(i), &reader, builder.depth(i), width)?, i);
+					let id = builder.id(i);
+					if ids.insert(id) {
+						builder.fill(get_children(id, &reader, builder.depth(i), width)?, i);
+					}
 				}
 				builder.finish_fill();
 			}
