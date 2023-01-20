@@ -74,9 +74,7 @@ impl Actions for Application {
 	fn rename(&mut self) -> Result<(), Error> {
 		let mut writer = self.store.writer()?;
 		for &id in self.tree_view.selection_ids() {
-			let reader = self.store.reader()?;
-			let original = bincode::deserialize(reader.read(id)?.unwrap())?;
-			drop(reader);
+			let original = bincode::deserialize(writer.read(id)?.unwrap())?;
 
 			let name = &self.status_view.command;
 			let data = bincode::serialize(&NodeData { name: name.into(), ..original })?;
@@ -95,9 +93,7 @@ impl Actions for Application {
 	fn set_priority(&mut self, priority: Priority) -> Result<(), Error> {
 		let mut writer = self.store.writer()?;
 		for &id in self.tree_view.selection_ids() {
-			let reader = self.store.reader()?;
-			let original = bincode::deserialize(reader.read(id)?.unwrap())?;
-			drop(reader);
+			let original = bincode::deserialize(writer.read(id)?.unwrap())?;
 
 			let data = bincode::serialize(&NodeData { priority, ..original })?;
 
@@ -115,9 +111,7 @@ impl Actions for Application {
 	fn set_due_date(&mut self) -> Result<(), Error> {
 		let mut writer = self.store.writer()?;
 		for &id in self.tree_view.selection_ids() {
-			let reader = self.store.reader()?;
-			let original = bincode::deserialize(reader.read(id)?.unwrap())?;
-			drop(reader);
+			let original = bincode::deserialize(writer.read(id)?.unwrap())?;
 
 			let Ok(due_date) = fuzzydate::parse(&self.status_view.command) else {
 				return Ok(());
@@ -138,9 +132,7 @@ impl Actions for Application {
 	fn unset_due_date(&mut self) -> Result<(), Error> {
 		let mut writer = self.store.writer()?;
 		for &id in self.tree_view.selection_ids() {
-			let reader = self.store.reader()?;
-			let original = bincode::deserialize(reader.read(id)?.unwrap())?;
-			drop(reader);
+			let original = bincode::deserialize(writer.read(id)?.unwrap())?;
 
 			let data = bincode::serialize(&NodeData { due_date: None, ..original })?;
 
