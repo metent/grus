@@ -180,21 +180,11 @@ impl<'env> StoreWriter<'env> {
 		btree::del(&mut self.txn, &mut self.links, &pid, Some(&id))?;
 
 		let rt = self.get_rt(id, pid)?.ok_or_else(invalid_data_error)?;
-		if rt.prev > 0 { self.modify_rt(rt.prev, pid, |prt| prt.next = rt.next)? };
+		if rt.prev > 0 { self.modify_rt(rt.prev, pid, |prt| prt.next = rt.next)?; }
+		else if rt.next > 0 { btree::put(&mut self.txn, &mut self.links, &pid, &rt.next)?; }
 		if rt.next > 0 { self.modify_rt(rt.next, pid, |nrt| nrt.prev = rt.prev)? };
-		btree::del(&mut self.txn, &mut self.rlinks, &id, Some(&rt))?;
 
-		if let Some((&eid, _)) = btree::get(&self.txn, &self.rlinks, &id, None)? {
-			if eid == id { return Ok(()) };
-		}
-
-		btree::del(&mut self.txn, &mut self.nodes, &id, None)?;
-
-		let mut child_ids = ChildIds::new(self, id)?;
-		while let Some(child_id) = child_ids.next(self)? {
-			self.delete(id, child_id)?;
-		}
-		Ok(())
+		self.delete_helper(pid, id)
 	}
 
 	pub fn modify(&mut self, id: u64, data: &[u8]) -> Result<(), Error> {
@@ -244,6 +234,27 @@ impl<'env> StoreWriter<'env> {
 		btree::del(&mut self.txn, &mut self.rlinks, &id, Some(&rt))?;
 		f(&mut rt);
 		btree::put(&mut self.txn, &mut self.rlinks, &id, &rt)?;
+		Ok(())
+	}
+
+	fn delete_helper(&mut self, pid: u64, id: u64) -> Result<(), Error> {
+		let rt = self.get_rt(id, pid)?.ok_or_else(invalid_data_error)?;
+		btree::del(&mut self.txn, &mut self.rlinks, &id, Some(&rt))?;
+
+		if let Some((&eid, _)) = btree::get(&self.txn, &self.rlinks, &id, None)? {
+			if eid == id { return Ok(()) };
+		}
+
+		btree::del(&mut self.txn, &mut self.nodes, &id, None)?;
+
+		let mut child_ids = ChildIds::new(self, id)?;
+		if let Some(first) = child_ids.next(self)? {
+			btree::del(&mut self.txn, &mut self.links, &id, Some(&first))?;
+			self.delete(id, first)?;
+		}
+		while let Some(child_id) = child_ids.next(self)? {
+			self.delete(id, child_id)?;
+		}
 		Ok(())
 	}
 
