@@ -10,7 +10,6 @@ pub trait Actions {
 	fn add_child(&mut self) -> Result<(), Error>;
 	fn delete(&mut self) -> Result<(), Error>;
 	fn rename(&mut self) -> Result<(), Error>;
-	fn set_priority(&mut self, priority: Priority) -> Result<(), Error>;
 	fn set_due_date(&mut self) -> Result<(), Error>;
 	fn unset_due_date(&mut self) -> Result<(), Error>;
 	fn cut(&mut self) -> Result<(), Error>;
@@ -78,24 +77,6 @@ impl Actions for Application {
 
 			let name = &self.status_view.command;
 			let data = bincode::serialize(&NodeData { name: name.into(), ..original })?;
-
-			writer.modify(id, &data)?;
-		}
-		writer.commit()?;
-
-		self.tree_view.clear_selections();
-		self.update_tree_view(SelRetention::SameId)?;
-
-		self.cancel();
-		Ok(())
-	}
-
-	fn set_priority(&mut self, priority: Priority) -> Result<(), Error> {
-		let mut writer = self.store.writer()?;
-		for &id in self.tree_view.selection_ids() {
-			let original = bincode::deserialize(writer.read(id)?.unwrap())?;
-
-			let data = bincode::serialize(&NodeData { priority, ..original })?;
 
 			writer.modify(id, &data)?;
 		}
@@ -211,13 +192,13 @@ pub fn build_flattree(
 	height: usize,
 	width: usize,
 ) -> Result<Vec<Node<'static>>, Error> {
-	if width == 0 { return Ok(Vec::new()) }
+	if width <= 1 { return Ok(Vec::new()) }
 
 	let reader = store.reader()?;
 	let root_data: NodeData = bincode::deserialize(reader.read(id)?.unwrap())?;
-	let root_splits = wrap_text(&root_data.name, width);
+	let root_splits = wrap_text(&root_data.name, width.saturating_sub(1));
 	if root_splits.len() - 1 > height { return Ok(Vec::new()) }
-	let root = Node { id, pid: id, data: root_data, depth: 0, splits: root_splits };
+	let root = Node { id, pid: id, data: root_data, priority: Priority::default(), depth: 0, splits: root_splits };
 	let mut builder = FlatTreeBuilder::new(root, height);
 	let mut ids = HashSet::new();
 
@@ -249,10 +230,16 @@ fn get_children(
 	for entry in reader.children(pid)? {
 		let (id, data) = entry?;
 		let data: NodeData = bincode::deserialize(data)?;
-		let width = width.saturating_sub(2 * depth);
+		let width = width.saturating_sub(2 * depth + 1);
 		if width == 0 { continue }
 		let splits = wrap_text(&data.name, width);
-		children.push(Node { id, pid, depth, data, splits });
+		children.push(Node { id, pid, depth, data, priority: Priority::default(), splits });
+	}
+	for i in 0..children.len() {
+		children[i].priority = Priority {
+			det: i as u64,
+			total: children.len() as u64,
+		};
 	}
 	Ok(children)
 }

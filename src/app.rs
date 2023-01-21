@@ -2,7 +2,7 @@ use std::io;
 use std::path::Path;
 use crossterm::event::{self, KeyCode, Event};
 use crate::actions::{Actions, build_flattree};
-use crate::node::{NodeData, Priority};
+use crate::node::NodeData;
 use crate::store::Store;
 use crate::ui::{Screen, status::StatusView, tree::TreeView};
 use crate::ui::BufPrint;
@@ -50,10 +50,6 @@ impl Application {
 						KeyCode::Char('r') => self.enter_command_mode(CommandType::Rename),
 						KeyCode::Char('x') => self.enter_command_mode(CommandType::SetDueDate),
 						KeyCode::Char('X') => self.unset_due_date()?,
-						KeyCode::Char('H') => self.set_priority(Priority::High)?,
-						KeyCode::Char('M') => self.set_priority(Priority::Medium)?,
-						KeyCode::Char('L') => self.set_priority(Priority::Low)?,
-						KeyCode::Char('N') => self.set_priority(Priority::None)?,
 						KeyCode::Char('d') => self.delete()?,
 						_ => {},
 					}

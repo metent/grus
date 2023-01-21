@@ -9,6 +9,7 @@ pub struct Node<'a> {
 	pub pid: u64,
 	pub depth: usize,
 	pub data: NodeData<'a>,
+	pub priority: Priority,
 	pub splits: Vec<usize>,
 }
 
@@ -26,7 +27,6 @@ impl<'a> Node<'a> {
 #[cfg_attr(test, derive(Clone, Debug, PartialEq, Default))]
 pub struct NodeData<'a> {
 	pub name: Cow<'a, str>,
-	pub priority: Priority,
 	pub due_date: Option<NaiveDateTime>,
 }
 
@@ -34,29 +34,22 @@ impl<'a> NodeData<'a> {
 	pub fn with_name(name: &'a str) -> Self {
 		NodeData {
 			name: name.into(),
-			priority: Priority::None,
 			due_date: None,
 		}
 	}
 }
 
-#[derive(Copy, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
-#[cfg_attr(test, derive(Debug, Default))]
-pub enum Priority {
-	High,
-	Medium,
-	Low,
-	#[cfg_attr(test, default)]
-	None,
+#[cfg_attr(test, derive(Clone, Debug, PartialEq))]
+pub struct Priority {
+	pub det: u64,
+	pub total: u64,
 }
 
-impl Display for Priority {
-	fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-		match self {
-			Priority::High => write!(f, "High"),
-			Priority::Medium => write!(f, "Medium"),
-			Priority::Low => write!(f, "Low"),
-			_ => Ok(())
+impl Default for Priority {
+	fn default() -> Self {
+		Priority {
+			det: 0,
+			total: 1,
 		}
 	}
 }

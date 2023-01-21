@@ -6,7 +6,7 @@ use std::iter;
 use crossterm::QueueableCommand;
 use crossterm::cursor::MoveTo;
 use crossterm::style::{Color, Colors, Print, ResetColor, SetColors, SetForegroundColor};
-use crate::node::{Node, Displayable};
+use crate::node::{Node, Displayable, Priority};
 use super::{BufPrint, Rect, Screen};
 
 pub struct TreeView {
@@ -207,13 +207,15 @@ impl BufPrint<TreeView> for Screen {
 
 			match (i == view.cursor, view.is_selected(task.pid, task.id)) {
 				(true, true) =>
-					self.print_sel_task(task, h, Colors::new(Color::White, Color::Blue))?,
+					self.print_task(task, h, Colors::new(Color::White, Color::Blue))?,
 				(true, false) =>
-					self.print_sel_task(task, h, Colors::new(Color::Black, Color::White))?,
+					self.print_task(task, h, Colors::new(Color::Black, Color::White))?,
 				(false, true) =>
-					self.print_sel_task(task, h, Colors::new(Color::White, Color::DarkBlue))?,
-				(false, false) =>
-					self.print_task(task, h)?,
+					self.print_task(task, h, Colors::new(Color::White, Color::DarkBlue))?,
+				(false, false) => self.print_task(task, h, Colors {
+					foreground: Some(Color::White),
+					background: None,
+				})?,
 			}
 			h += task.height();
 		}
@@ -248,8 +250,7 @@ impl BufPrint<TreeView> for Screen {
 }
 
 trait PrintTask {
-	fn print_task(&mut self, task: &Node, dy: u16) -> io::Result<()>;
-	fn print_sel_task(&mut self, task: &Node, dy: u16, colors: Colors) -> io::Result<()>;
+	fn print_task(&mut self, task: &Node, dy: u16, colors: Colors) -> io::Result<()>;
 	fn print_div_lines(
 		&mut self,
 		task: &Node,
@@ -261,36 +262,16 @@ trait PrintTask {
 }
 
 impl PrintTask for Screen {
-	fn print_task(&mut self, task: &Node, dy: u16) -> io::Result<()> {
-		self.stdout
-			.queue(MoveTo(self.constr.priority.x, self.constr.priority.y + dy))?
-			.queue(Print(task.data.priority))?
-			.queue(MoveTo(self.constr.due_date.x, self.constr.due_date.y + dy))?
-			.queue(Print(Displayable(task.data.due_date)))?;
-
-		for (i, split) in task.splits().enumerate() {
-			self.stdout
-				.queue(MoveTo(
-					self.constr.tasks.x + 2 * task.depth as u16,
-					self.constr.tasks.y + dy + i as u16,
-				))?
-				.queue(Print(split))?;
-		}
-		Ok(())
-	}
-
-	fn print_sel_task(&mut self, task: &Node, dy: u16, colors: Colors) -> io::Result<()> {
+	fn print_task(&mut self, task: &Node, dy: u16, colors: Colors) -> io::Result<()> {
 		self.stdout
 			.queue(SetColors(colors))?
-			.queue(MoveTo(self.constr.priority.x, self.constr.priority.y + dy))?
-			.queue(Print(task.data.priority))?
 			.queue(MoveTo(self.constr.due_date.x, self.constr.due_date.y + dy))?
 			.queue(Print(Displayable(task.data.due_date)))?;
 
 		for (i, split) in task.splits().enumerate() {
 			self.stdout
 				.queue(MoveTo(
-					self.constr.tasks.x + 2 * task.depth as u16,
+					self.constr.tasks.x + 2 * task.depth as u16 + 1,
 					self.constr.tasks.y + dy + i as u16
 				))?
 				.queue(Print(split))?;
@@ -308,7 +289,15 @@ impl PrintTask for Screen {
 		is_last: bool,
 		color: Color
 	) -> io::Result<()> {
-		if task.depth == 0 { return Ok(()) };
+		if task.depth == 0 {
+			self.stdout
+				.queue(MoveTo(self.constr.tasks.x, self.constr.tasks.y))?
+				.queue(SetForegroundColor(color_from_prio(&task.priority)))?
+				.queue(Print("•"))?
+				.queue(ResetColor)?;
+			return Ok(());
+		}
+
 		for dy in dy..dy + task.height() {
 			self.stdout.queue(MoveTo(self.constr.tasks.x, self.constr.tasks.y + dy))?;
 			let mut pos_iter = line_pos.iter();
@@ -322,9 +311,9 @@ impl PrintTask for Screen {
 				}
 			}
 			if is_last {
-				self.stdout.queue(Print("  "))?;
+				self.stdout.queue(Print("   "))?;
 			} else {
-				self.stdout.queue(Print("│ "))?;
+				self.stdout.queue(Print("│  "))?;
 			}
 		}
 
@@ -346,6 +335,41 @@ impl PrintTask for Screen {
 				self.stdout.queue(Print("├─"))?;
 			}
 		}
+		self.stdout
+			.queue(SetForegroundColor(color_from_prio(&task.priority)))?
+			.queue(Print("•"))?
+			.queue(ResetColor)?;
 		Ok(())
+	}
+}
+
+fn color_from_prio(prio: &Priority) -> Color {
+	color_from_hsv((prio.det * 120) as f64 / prio.total as f64, 1.0, 1.0)
+}
+
+fn color_from_hsv(hue: f64, saturation: f64, value: f64) -> Color {
+	let c = value * saturation;
+	let h = hue / 60.0;
+	let x = c * (1.0 - (h % 2.0 - 1.0).abs());
+	let m = value - c;
+
+	let (red, green, blue) = if h >= 0.0 && h < 1.0 {
+		(c, x, 0.0)
+	} else if h >= 1.0 && h < 2.0 {
+		(x, c, 0.0)
+	} else if h >= 2.0 && h < 3.0 {
+		(0.0, c, x)
+	} else if h >= 3.0 && h < 4.0 {
+		(0.0, x, c)
+	} else if h >= 4.0 && h < 5.0 {
+		(x, 0.0, c)
+	} else {
+		(c, 0.0, x)
+	};
+
+	Color::Rgb {
+		r: ((red + m) * 255.0) as u8,
+		g: ((green + m) * 255.0) as u8,
+		b: ((blue + m) * 255.0) as u8,
 	}
 }

@@ -53,7 +53,7 @@ impl FlatTreeBuilder {
 	}
 
 	pub fn fill(&mut self, mut children: Vec<Node<'static>>, last: usize) {
-		children.sort_by(|l, r| l.data.priority.cmp(&r.data.priority));
+		children.sort_by(|l, r| l.priority.det.cmp(&r.priority.det));
 		self.queue.push_back(FChildIter {
 			iter: children.into_iter(),
 			last
@@ -101,9 +101,9 @@ mod tests {
 				depth: 0,
 				data: NodeData {
 					name: "/".into(),
-					priority: Priority::None,
 					..NodeData::default()
 				},
+				priority: Priority { det: 0, total: 1 },
 				splits: vec![0, 1],
 			},
 			Node {
@@ -112,9 +112,9 @@ mod tests {
 				depth: 1,
 				data: NodeData {
 					name: "a".into(),
-					priority: Priority::High,
 					..NodeData::default()
 				},
+				priority: Priority { det: 0, total: 3 },
 				splits: vec![0, 1],
 			},
 			Node {
@@ -123,9 +123,9 @@ mod tests {
 				depth: 2,
 				data: NodeData {
 					name: "x".into(),
-					priority: Priority::High,
 					..NodeData::default()
 				},
+				priority: Priority { det: 0, total: 2 },
 				splits: vec![0, 1],
 			},
 			Node {
@@ -134,9 +134,9 @@ mod tests {
 				depth: 2,
 				data: NodeData {
 					name: "y".into(),
-					priority: Priority::Medium,
 					..NodeData::default()
 				},
+				priority: Priority { det: 1, total: 2 },
 				splits: vec![0, 1],
 			},
 			Node {
@@ -145,9 +145,9 @@ mod tests {
 				depth: 1,
 				data: NodeData {
 					name: "b".into(),
-					priority: Priority::Medium,
 					..NodeData::default()
 				},
+				priority: Priority { det: 1, total: 3 },
 				splits: vec![0, 1],
 			},
 			Node {
@@ -156,9 +156,9 @@ mod tests {
 				depth: 1,
 				data: NodeData {
 					name: "c".into(),
-					priority: Priority::Low,
 					..NodeData::default()
 				},
+				priority: Priority { det: 2, total: 3 },
 				splits: vec![0, 1],
 			},
 		];
