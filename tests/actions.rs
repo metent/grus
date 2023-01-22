@@ -6,10 +6,10 @@ use grus::node::NodeData;
 #[test]
 fn add_child() -> Result<(), Error> {
 	test_action("add_child", |mut app| {
-		"one".chars().for_each(|c| app.status_view.command.push(c));
+		app.status_view.set_input("one");
 		app.add_child()?;
 		app.tree_view.cursor_down();
-		"two".chars().for_each(|c| app.status_view.command.push(c));
+		app.status_view.set_input("two");
 		app.add_child()?;
 
 		let reader = app.store.reader()?;

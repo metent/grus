@@ -31,7 +31,7 @@ impl Actions for Application {
 		let title = match cmd {
 			CommandType::AddChild => "add: ",
 			CommandType::Rename => {
-				self.status_view.command.push_str(&node.data.name);
+				self.status_view.set_input(&node.data.name);
 				"rename: "
 			}
 			CommandType::SetDueDate => "due date: ",
@@ -43,7 +43,7 @@ impl Actions for Application {
 		let mut selections = self.tree_view.selection_ids();
 		let Some(&first) = selections.next() else { return Ok(()) };
 
-		let name = &self.status_view.command;
+		let name = self.status_view.input();
 		let data = bincode::serialize(&NodeData::with_name(name))?;
 
 		let mut writer = self.store.writer()?;
@@ -79,7 +79,7 @@ impl Actions for Application {
 		for &id in self.tree_view.selection_ids() {
 			let original = bincode::deserialize(writer.read(id)?.unwrap())?;
 
-			let name = &self.status_view.command;
+			let name = self.status_view.input();
 			let data = bincode::serialize(&NodeData { name: name.into(), ..original })?;
 
 			writer.modify(id, &data)?;
@@ -98,7 +98,7 @@ impl Actions for Application {
 		for &id in self.tree_view.selection_ids() {
 			let original = bincode::deserialize(writer.read(id)?.unwrap())?;
 
-			let Ok(due_date) = parse_date_string(&self.status_view.command, Local::now(), Dialect::Uk) else {
+			let Ok(due_date) = parse_date_string(self.status_view.input(), Local::now(), Dialect::Uk) else {
 				return Ok(());
 			};
 			let data = bincode::serialize(&NodeData { due_date: Some(due_date.naive_local()), ..original })?;
@@ -191,7 +191,7 @@ impl Actions for Application {
 	}
 
 	fn cancel(&mut self) {
-		self.status_view.command.clear();
+		self.status_view.clear();
 		self.mode = Mode::Normal;
 	}
 
