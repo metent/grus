@@ -193,6 +193,65 @@ impl<'env> StoreWriter<'env> {
 		Ok(())
 	}
 
+	pub fn move_up(&mut self, pid: u64, id: u64) -> Result<(), Error> {
+		let rt = self.get_rt(id, pid)?.ok_or_else(invalid_data_error)?;
+		let prt = if rt.prev > 0 {
+			self.get_rt(rt.prev, pid)?.ok_or_else(invalid_data_error)?
+		} else { return Ok(()) };
+
+		self.modify_rt(id, pid, |crt| {
+			crt.next = rt.prev;
+			crt.prev = prt.prev;
+		})?;
+
+		if rt.next > 0 {
+			self.modify_rt(rt.next, pid, |nrt| nrt.prev = rt.prev)?;
+		}
+
+		self.modify_rt(rt.prev, pid, |prt| {
+			prt.next = rt.next;
+			prt.prev = id;
+		})?;
+
+		if prt.prev > 0 {
+			self.modify_rt(prt.prev, pid, |pprt| pprt.next = id)?;
+		} else {
+			btree::del(&mut self.txn, &mut self.links, &pid, None)?;
+			btree::put(&mut self.txn, &mut self.links, &pid, &id)?;
+		}
+
+		Ok(())
+	}
+
+	pub fn move_down(&mut self, pid: u64, id: u64) -> Result<(), Error> {
+		let rt = self.get_rt(id, pid)?.ok_or_else(invalid_data_error)?;
+		let nrt = if rt.next > 0 {
+			self.get_rt(rt.next, pid)?.ok_or_else(invalid_data_error)?
+		} else { return Ok(()) };
+
+		self.modify_rt(id, pid, |crt| {
+			crt.prev = rt.next;
+			crt.next = nrt.next;
+		})?;
+
+		if rt.prev > 0 {
+			self.modify_rt(rt.prev, pid, |prt| prt.next = rt.next)?;
+		} else {
+			btree::del(&mut self.txn, &mut self.links, &pid, None)?;
+			btree::put(&mut self.txn, &mut self.links, &pid, &rt.next)?;
+		}
+
+		self.modify_rt(rt.next, pid, |nrt| {
+			nrt.prev = rt.prev;
+			nrt.next = id;
+		})?;
+
+		if nrt.next > 0 {
+			self.modify_rt(nrt.next, pid, |nnrt| nnrt.prev = id)?;
+		}
+		Ok(())
+	}
+
 	pub fn share(&mut self, src: u64, dest: u64) -> Result<bool, Error> {
 		if self.is_descendent_of(dest, src)? { return Ok(false) };
 		if self.get_rt(src, dest)?.is_some() { return Ok(false) };

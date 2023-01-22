@@ -12,6 +12,8 @@ pub trait Actions {
 	fn rename(&mut self) -> Result<(), Error>;
 	fn set_due_date(&mut self) -> Result<(), Error>;
 	fn unset_due_date(&mut self) -> Result<(), Error>;
+	fn priority_up(&mut self) -> Result<(), Error>;
+	fn priority_down(&mut self) -> Result<(), Error>;
 	fn cut(&mut self) -> Result<(), Error>;
 	fn move_into(&mut self) -> Result<(), Error>;
 	fn move_out(&mut self) -> Result<(), Error>;
@@ -122,6 +124,32 @@ impl Actions for Application {
 		writer.commit()?;
 
 		self.tree_view.clear_selections();
+		self.update_tree_view(SelRetention::SameId)?;
+		Ok(())
+	}
+
+	fn priority_up(&mut self) -> Result<(), Error> {
+		let Some(node) = self.tree_view.cursor_node() else { return Ok(()) };
+
+		if self.tree_view.is_cursor_at_root() { return Ok(()) };
+
+		let mut writer = self.store.writer()?;
+		writer.move_up(node.pid, node.id)?;
+		writer.commit()?;
+
+		self.update_tree_view(SelRetention::SameId)?;
+		Ok(())
+	}
+
+	fn priority_down(&mut self) -> Result<(), Error> {
+		let Some(node) = self.tree_view.cursor_node() else { return Ok(()) };
+
+		if self.tree_view.is_cursor_at_root() { return Ok(()) };
+
+		let mut writer = self.store.writer()?;
+		writer.move_down(node.pid, node.id)?;
+		writer.commit()?;
+
 		self.update_tree_view(SelRetention::SameId)?;
 		Ok(())
 	}

@@ -50,6 +50,8 @@ impl Application {
 						KeyCode::Char('r') => self.enter_command_mode(CommandType::Rename),
 						KeyCode::Char('x') => self.enter_command_mode(CommandType::SetDueDate),
 						KeyCode::Char('X') => self.unset_due_date()?,
+						KeyCode::Char('K') => self.priority_up()?,
+						KeyCode::Char('J') => self.priority_down()?,
 						KeyCode::Char('d') => self.delete()?,
 						_ => {},
 					}
