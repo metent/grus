@@ -1,4 +1,6 @@
 use std::collections::HashSet;
+use chrono::Local;
+use interim::{parse_date_string, Dialect};
 use crate::app::{Application, CommandType, Error, Mode};
 use crate::flattree::{FlatTreeBuilder, FlatTreeState};
 use crate::node::{Node, NodeData, Priority, wrap_text};
@@ -96,10 +98,10 @@ impl Actions for Application {
 		for &id in self.tree_view.selection_ids() {
 			let original = bincode::deserialize(writer.read(id)?.unwrap())?;
 
-			let Ok(due_date) = fuzzydate::parse(&self.status_view.command) else {
+			let Ok(due_date) = parse_date_string(&self.status_view.command, Local::now(), Dialect::Uk) else {
 				return Ok(());
 			};
-			let data = bincode::serialize(&NodeData { due_date: Some(due_date), ..original })?;
+			let data = bincode::serialize(&NodeData { due_date: Some(due_date.naive_local()), ..original })?;
 
 			writer.modify(id, &data)?;
 		}
