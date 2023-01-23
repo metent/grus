@@ -87,7 +87,9 @@ pub fn wrap_text(text: &str, w: usize) -> Vec<usize> {
 		if ch == ' ' {
 			if in_a_word {
 				if j - i == w && !long_word {
-					splits.push(i);
+					if splits.last() != Some(&i) {
+						splits.push(i);
+					}
 					d += w - (i + d) % w;
 				}
 
