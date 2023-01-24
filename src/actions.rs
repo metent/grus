@@ -16,6 +16,7 @@ pub trait Actions {
 	fn unset_due_date(&mut self) -> Result<(), Error>;
 	fn priority_up(&mut self) -> Result<(), Error>;
 	fn priority_down(&mut self) -> Result<(), Error>;
+	fn share(&mut self) -> Result<(), Error>;
 	fn cut(&mut self) -> Result<(), Error>;
 	fn move_into(&mut self) -> Result<(), Error>;
 	fn move_out(&mut self) -> Result<(), Error>;
@@ -153,6 +154,20 @@ impl Actions for Application {
 		writer.commit()?;
 
 		self.update_tree_view(SelRetention::SameId)?;
+		Ok(())
+	}
+
+	fn share(&mut self) -> Result<(), Error> {
+		let Some(node) = self.tree_view.cursor_node() else { return Ok(()) };
+
+		let mut writer = self.store.writer()?;
+		for &id in self.tree_view.selection_ids() {
+			if !writer.share(id, node.id)? { return Ok(()) };
+		}
+		writer.commit()?;
+
+		self.tree_view.clear_selections();
+		self.update_tree_view(SelRetention::Stay)?;
 		Ok(())
 	}
 

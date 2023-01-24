@@ -45,6 +45,7 @@ impl Application {
 						KeyCode::Char('h') | KeyCode::Left => self.move_out()?,
 						KeyCode::Char('l') | KeyCode::Right => self.move_into()?,
 						KeyCode::Char(' ') => self.tree_view.toggle(),
+						KeyCode::Char('.') => self.share()?,
 						KeyCode::Char('p') => self.cut()?,
 						KeyCode::Char('a') => self.enter_command_mode(CommandType::AddChild),
 						KeyCode::Char('r') => self.enter_command_mode(CommandType::Rename),
