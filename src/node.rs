@@ -1,6 +1,8 @@
 use std::borrow::Cow;
 use std::fmt::{self, Display, Formatter};
+use std::str::FromStr;
 use chrono::{Datelike, NaiveDateTime, Local};
+use interim::{parse_date_string, DateError, Dialect};
 use serde::{Serialize, Deserialize};
 
 #[cfg_attr(test, derive(Clone, Debug, PartialEq))]
@@ -9,6 +11,7 @@ pub struct Node<'a> {
 	pub pid: u64,
 	pub depth: usize,
 	pub data: NodeData<'a>,
+	pub session: Option<Session>,
 	pub priority: Priority,
 	pub splits: Vec<usize>,
 }
@@ -39,6 +42,27 @@ impl<'a> NodeData<'a> {
 	}
 }
 
+#[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Clone, Copy)]
+#[cfg_attr(test, derive(Default))]
+pub struct Session {
+	pub start: NaiveDateTime,
+	pub end: NaiveDateTime,
+}
+
+impl FromStr for Session {
+	type Err = DateError;
+
+	fn from_str(s: &str) -> Result<Self, Self::Err> {
+		match s.split_once(" to ") {
+			Some((s, e)) => Ok(Session {
+				start: parse_date_string(s, Local::now(), Dialect::Uk)?.naive_local(),
+				end: parse_date_string(e, Local::now(), Dialect::Uk)?.naive_local(),
+			}),
+			None => Err(DateError::MissingDate),
+		}
+	}
+}
+
 #[cfg_attr(test, derive(Clone, Debug, PartialEq))]
 pub struct Priority {
 	pub det: u64,
@@ -54,7 +78,7 @@ impl Default for Priority {
 	}
 }
 
-pub struct Displayable<T: Display>(pub Option<T>);
+pub struct Displayable<T>(pub Option<T>);
 
 impl Display for Displayable<NaiveDateTime> {
 	fn fmt(&self, f: &mut Formatter) -> fmt::Result {
@@ -70,6 +94,14 @@ impl Display for Displayable<NaiveDateTime> {
 		} else {
 			write!(f, "{}", dt.format("%-I:%M %p"))
 		}
+	}
+}
+
+impl Display for Displayable<Session> {
+	fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+		let Displayable(Some(session)) = self else { return Ok(()) };
+
+		write!(f, "{} to {}", Displayable(Some(session.start)), Displayable(Some(session.end)))
 	}
 }
 

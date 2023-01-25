@@ -50,6 +50,7 @@ impl Application {
 						KeyCode::Char('a') => self.enter_command_mode(CommandType::AddChild),
 						KeyCode::Char('r') => self.enter_command_mode(CommandType::Rename),
 						KeyCode::Char('x') => self.enter_command_mode(CommandType::SetDueDate),
+						KeyCode::Char('s') => self.enter_command_mode(CommandType::AddSession),
 						KeyCode::Char('X') => self.unset_due_date()?,
 						KeyCode::Char('K') => self.priority_up()?,
 						KeyCode::Char('J') => self.priority_down()?,
@@ -62,6 +63,7 @@ impl Application {
 								CommandType::AddChild => self.add_child()?,
 								CommandType::Rename => self.rename()?,
 								CommandType::SetDueDate => self.set_due_date()?,
+								CommandType::AddSession => self.add_session()?,
 							}
 						}
 						KeyCode::Char(c) => self.status_view.insert(c),
@@ -108,6 +110,7 @@ pub enum CommandType {
 	AddChild,
 	Rename,
 	SetDueDate,
+	AddSession,
 }
 
 #[derive(thiserror::Error, Debug)]

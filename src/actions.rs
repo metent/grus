@@ -1,9 +1,10 @@
 use std::collections::HashSet;
+use std::str::FromStr;
 use chrono::Local;
 use interim::{parse_date_string, Dialect};
 use crate::app::{Application, CommandType, Error, Mode};
 use crate::flattree::{FlatTreeBuilder, FlatTreeState};
-use crate::node::{Node, NodeData, Priority, wrap_text};
+use crate::node::{Node, NodeData, Priority, Session, wrap_text};
 use crate::store::{Store, StoreReader};
 use crate::ui::tree::SelRetention;
 
@@ -14,6 +15,7 @@ pub trait Actions {
 	fn rename(&mut self) -> Result<(), Error>;
 	fn set_due_date(&mut self) -> Result<(), Error>;
 	fn unset_due_date(&mut self) -> Result<(), Error>;
+	fn add_session(&mut self) -> Result<(), Error>;
 	fn priority_up(&mut self) -> Result<(), Error>;
 	fn priority_down(&mut self) -> Result<(), Error>;
 	fn share(&mut self) -> Result<(), Error>;
@@ -36,6 +38,7 @@ impl Actions for Application {
 				"rename: "
 			}
 			CommandType::SetDueDate => "due date: ",
+			CommandType::AddSession => "add session: ",
 		};
 		self.status_view.set_title(title);
 	}
@@ -128,6 +131,20 @@ impl Actions for Application {
 
 		self.tree_view.clear_selections();
 		self.update_tree_view(SelRetention::SameId)?;
+		Ok(())
+	}
+
+	fn add_session(&mut self) -> Result<(), Error> {
+		let Some(node) = self.tree_view.cursor_node() else { return Ok(()) };
+
+		let mut writer = self.store.writer()?;
+
+		let Ok(session) = Session::from_str(&self.status_view.input()) else { return Ok(()) };
+		writer.add_session(node.id, &session)?;
+		writer.commit()?;
+
+		self.update_tree_view(SelRetention::SameId)?;
+		self.cancel();
 		Ok(())
 	}
 
@@ -243,7 +260,7 @@ pub fn build_flattree(
 	let root_data: NodeData = bincode::deserialize(reader.read(id)?.unwrap())?;
 	let root_splits = wrap_text(&root_data.name, width.saturating_sub(1));
 	if root_splits.len() - 1 > height { return Ok(Vec::new()) }
-	let root = Node { id, pid: id, data: root_data, priority: Priority::default(), depth: 0, splits: root_splits };
+	let root = Node { id, pid: id, data: root_data, session: reader.read_session(id)?.map(|s| *s), priority: Priority::default(), depth: 0, splits: root_splits };
 	let mut builder = FlatTreeBuilder::new(root, height);
 	let mut ids = HashSet::new();
 
@@ -278,7 +295,15 @@ fn get_children(
 		let width = width.saturating_sub(2 * depth + 1);
 		if width == 0 { continue }
 		let splits = wrap_text(&data.name, width);
-		children.push(Node { id, pid, depth, data, priority: Priority::default(), splits });
+		children.push(Node {
+			id,
+			pid,
+			depth,
+			data,
+			session: reader.read_session(id)?.map(|s| *s),
+			priority: Priority::default(),
+			splits
+		});
 	}
 	for i in 0..children.len() {
 		children[i].priority = Priority {

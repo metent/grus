@@ -26,17 +26,17 @@ impl Screen {
 		if h < 2 { return }
 		self.constr.w = w;
 		self.constr.h = h;
-		self.constr.tasks = Rect { x: 1, y: 1, w: 2 * (w - 1) / 3, h: h - 2 };
-		self.constr.priority = Rect {
+		self.constr.tasks = Rect { x: 1, y: 1, w: (w - 1) / 2, h: h - 2 };
+		self.constr.session = Rect {
 			x: self.constr.tasks.x + self.constr.tasks.w + 1,
 			y: 1,
-			w: (w - 1) / 6,
+			w: (w - 1) / 3,
 			h: h - 2
 		};
 		self.constr.due_date = Rect {
-			x: self.constr.priority.x + self.constr.priority.w + 1,
+			x: self.constr.session.x + self.constr.session.w + 1,
 			y: 1,
-			w: w.saturating_sub(4 + self.constr.tasks.w + self.constr.priority.w),
+			w: w.saturating_sub(4 + self.constr.tasks.w + self.constr.session.w),
 			h: h - 2
 		};
 		self.constr.status = Rect { x: 0, y: h - 1, w, h: 1 };
@@ -84,7 +84,7 @@ pub struct Constraints {
 	w: u16,
 	h: u16,
 	tasks: Rect,
-	priority: Rect,
+	session: Rect,
 	due_date: Rect,
 	status: Rect,
 }

@@ -89,7 +89,7 @@ pub enum FlatTreeState {
 
 #[cfg(test)]
 mod tests {
-	use crate::node::{Node, NodeData, Priority};
+	use crate::node::{Node, NodeData, Priority, Session};
 	use super::{FlatTreeBuilder, FlatTreeState};
 
 	#[test]
@@ -103,6 +103,7 @@ mod tests {
 					name: "/".into(),
 					..NodeData::default()
 				},
+				session: Some(Session::default()),
 				priority: Priority { det: 0, total: 1 },
 				splits: vec![0, 1],
 			},
@@ -114,6 +115,7 @@ mod tests {
 					name: "a".into(),
 					..NodeData::default()
 				},
+				session: Some(Session::default()),
 				priority: Priority { det: 0, total: 3 },
 				splits: vec![0, 1],
 			},
@@ -125,6 +127,7 @@ mod tests {
 					name: "x".into(),
 					..NodeData::default()
 				},
+				session: Some(Session::default()),
 				priority: Priority { det: 0, total: 2 },
 				splits: vec![0, 1],
 			},
@@ -136,6 +139,7 @@ mod tests {
 					name: "y".into(),
 					..NodeData::default()
 				},
+				session: Some(Session::default()),
 				priority: Priority { det: 1, total: 2 },
 				splits: vec![0, 1],
 			},
@@ -147,6 +151,7 @@ mod tests {
 					name: "b".into(),
 					..NodeData::default()
 				},
+				session: Some(Session::default()),
 				priority: Priority { det: 1, total: 3 },
 				splits: vec![0, 1],
 			},
@@ -158,6 +163,7 @@ mod tests {
 					name: "c".into(),
 					..NodeData::default()
 				},
+				session: Some(Session::default()),
 				priority: Priority { det: 2, total: 3 },
 				splits: vec![0, 1],
 			},

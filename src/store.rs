@@ -2,15 +2,20 @@ use std::io::{Error as IoError, ErrorKind};
 use std::path::Path;
 use sanakirja::{Commit, Env, Error, LoadPage, MutTxn, RootDb, Storable, Txn};
 use sanakirja::btree::{self, Db, UDb};
+use crate::node::Session;
 
 type LinksDb = Db<u64, u64>;
 type RLinksDb = Db<u64, RTriple>;
 type NodesDb = UDb<u64, [u8]>;
+type SessionsDb = Db<u64, Session>;
+type RSessionsDb = Db<Session, u64>;
 
 const ID_SQ: usize = 0;
 const DB_LINKS: usize = 1;
 const DB_RLINKS: usize = 2;
 const DB_NODES: usize = 3;
+const DB_SESSIONS: usize = 4;
+const DB_RSESSIONS: usize = 5;
 
 pub struct Store {
 	env: Env
@@ -33,7 +38,9 @@ impl Store {
 		let links = txn.root_db(DB_LINKS).ok_or_else(invalid_data_error)?;
 		let rlinks = txn.root_db(DB_RLINKS).ok_or_else(invalid_data_error)?;
 		let nodes = txn.root_db(DB_NODES).ok_or_else(invalid_data_error)?;
-		Ok(StoreReader { txn, id, links, rlinks, nodes })
+		let sessions = txn.root_db(DB_SESSIONS).ok_or_else(invalid_data_error)?;
+		let rsessions = txn.root_db(DB_RSESSIONS).ok_or_else(invalid_data_error)?;
+		Ok(StoreReader { txn, id, links, rlinks, nodes, sessions, rsessions })
 	}
 
 	pub fn writer(&self) -> Result<StoreWriter, Error> {
@@ -42,7 +49,9 @@ impl Store {
 		let links = txn.root_db(DB_LINKS).ok_or_else(invalid_data_error)?;
 		let rlinks = txn.root_db(DB_RLINKS).ok_or_else(invalid_data_error)?;
 		let nodes = txn.root_db(DB_NODES).ok_or_else(invalid_data_error)?;
-		Ok(StoreWriter { txn, id, links, rlinks, nodes })
+		let sessions = txn.root_db(DB_SESSIONS).ok_or_else(invalid_data_error)?;
+		let rsessions = txn.root_db(DB_RSESSIONS).ok_or_else(invalid_data_error)?;
+		Ok(StoreWriter { txn, id, links, rlinks, nodes, sessions, rsessions })
 	}
 
 	fn create_base(&self, root_data: &[u8]) -> Result<(), Error> {
@@ -52,17 +61,21 @@ impl Store {
 		let links: Option<LinksDb> = txn.root_db(DB_LINKS);
 		let rlinks: Option<RLinksDb> = txn.root_db(DB_RLINKS);
 		let nodes: Option<NodesDb> = txn.root_db(DB_NODES);
-		match (id, links, rlinks, nodes) {
-			(Some(_), Some(_), Some(_), Some(nodes)) => {
+		let sessions: Option<SessionsDb> = txn.root_db(DB_SESSIONS);
+		let rsessions: Option<RSessionsDb> = txn.root_db(DB_RSESSIONS);
+		match (id, links, rlinks, nodes, sessions, rsessions) {
+			(Some(_), Some(_), Some(_), Some(nodes), Some(_), Some(_)) => {
 				match btree::get(&txn, &nodes, &0, None)? {
 					Some((&0, _)) => Ok(()),
 					_ => Err(invalid_data_error()),
 				}
 			}
-			(None, None, None, None) => {
+			(None, None, None, None, None, None) => {
 				let links: LinksDb = btree::create_db(&mut txn)?;
 				let rlinks: RLinksDb = btree::create_db(&mut txn)?;
 				let mut nodes: NodesDb = btree::create_db_(&mut txn)?;
+				let sessions: SessionsDb = btree::create_db(&mut txn)?;
+				let rsessions: RSessionsDb = btree::create_db(&mut txn)?;
 
 				btree::put(&mut txn, &mut nodes, &0, root_data)?;
 
@@ -70,6 +83,8 @@ impl Store {
 				txn.set_root(DB_LINKS, links.db);
 				txn.set_root(DB_RLINKS, rlinks.db);
 				txn.set_root(DB_NODES, nodes.db);
+				txn.set_root(DB_SESSIONS, sessions.db);
+				txn.set_root(DB_RSESSIONS, rsessions.db);
 				txn.commit()
 			}
 			_ => {
@@ -87,6 +102,8 @@ pub struct StoreRw<T: LoadPage> {
 	links: LinksDb,
 	rlinks: RLinksDb,
 	nodes: NodesDb,
+	sessions: SessionsDb,
+	rsessions: RSessionsDb,
 }
 
 impl<T: LoadPage<Error = Error>> StoreRw<T> {
@@ -97,11 +114,30 @@ impl<T: LoadPage<Error = Error>> StoreRw<T> {
 		}
 	}
 
+	pub fn read_session(&self, id: u64) -> Result<Option<&Session>, Error> {
+		match btree::get(&self.txn, &self.sessions, &id, None)? {
+			Some((&eid, session)) if eid == id => Ok(Some(session)),
+			_ => Ok(None)
+		}
+	}
+
 	pub fn children<'s>(&'s self, id: u64) -> Result<impl Iterator<Item = Result<(u64, &'s[u8]), Error>>, Error> {
 		Ok(self.child_ids(id)?.map(|child_id| match btree::get(&self.txn, &self.nodes, &child_id?, None)? {
 			Some((&child_id, data)) => Ok((child_id, data)),
 			None => Err(invalid_data_error()),
 		}))
+	}
+
+	pub fn sessions<'s>(&'s self, id: u64) -> Result<impl Iterator<Item = Result<(&'s u64, &'s Session), Error>>, Error> {
+		let iter = btree::iter(&self.txn, &self.sessions, Some((&id, None)))?;
+		Ok(iter.take_while(move |entry| match entry {
+			Ok((&eid, _)) if eid > id => false,
+			_ => true,
+		}))
+	}
+
+	pub fn all_sessions<'s>(&'s self) -> Result<impl Iterator<Item = Result<(&'s Session, &'s u64), Error>>, Error> {
+		btree::iter(&self.txn, &self.rsessions, None)
 	}
 
 	fn child_ids(&self, id: u64) -> Result<ChildIdIter<'_, T>, Error> {
@@ -174,6 +210,12 @@ impl<'env> StoreWriter<'env> {
 		btree::put(&mut self.txn, &mut self.nodes, &id, data)?;
 		self.id += 1;
 		Ok(id)
+	}
+
+	pub fn add_session(&mut self, id: u64, session: &Session) -> Result<(), Error> {
+		btree::put(&mut self.txn, &mut self.sessions, &id, session)?;
+		btree::put(&mut self.txn, &mut self.rsessions, session, &id)?;
+		Ok(())
 	}
 
 	pub fn delete(&mut self, pid: u64, id: u64) -> Result<(), Error> {
@@ -285,6 +327,8 @@ impl<'env> StoreWriter<'env> {
 		self.txn.set_root(DB_LINKS, self.links.db);
 		self.txn.set_root(DB_RLINKS, self.rlinks.db);
 		self.txn.set_root(DB_NODES, self.nodes.db);
+		self.txn.set_root(DB_SESSIONS, self.sessions.db);
+		self.txn.set_root(DB_RSESSIONS, self.rsessions.db);
 		self.txn.commit()
 	}
 
@@ -344,6 +388,17 @@ impl Storable for RTriple {
 	}
 }
 
+impl Storable for Session {
+	type PageReferences = core::iter::Empty<u64>;
+	fn page_references(&self) -> Self::PageReferences {
+		core::iter::empty()
+	}
+
+	fn compare<T>(&self, _: &T, b: &Self) -> core::cmp::Ordering {
+		self.cmp(b)
+	}
+}
+
 fn invalid_data_error() -> Error {
 	Error::IO(IoError::new(
 		ErrorKind::InvalidData,
@@ -353,7 +408,9 @@ fn invalid_data_error() -> Error {
 
 #[cfg(test)]
 mod tests {
+	use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 	use sanakirja::{Env, Error};
+	use crate::node::Session;
 	use super::Store;
 
 	#[test]
@@ -379,6 +436,30 @@ mod tests {
 		assert_eq!(id, 2);
 		assert_eq!(data, &[30, 20]);
 		assert!(iter.next().is_none());
+
+		Ok(())
+	}
+
+	#[test]
+	fn add_session() -> Result<(), Error> {
+		let store = Store { env: Env::new_anon(1 << 14, 2)? };
+		store.create_base(&[0])?;
+
+		let mut writer = store.writer()?;
+		let start = NaiveDateTime::new(
+			NaiveDate::from_ymd_opt(2023, 1, 1).unwrap(),
+			NaiveTime::from_hms_opt(0, 0, 0).unwrap(),
+		);
+		let end = NaiveDateTime::new(
+			NaiveDate::from_ymd_opt(2023, 1, 1).unwrap(),
+			NaiveTime::from_hms_opt(10, 0, 0).unwrap(),
+		);
+		let session = Session { start, end };
+		writer.add_session(0, &session)?;
+		writer.commit()?;
+
+		let reader = store.reader()?;
+		assert_eq!(reader.read_session(0)?.unwrap(), &session);
 
 		Ok(())
 	}

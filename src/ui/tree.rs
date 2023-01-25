@@ -177,7 +177,7 @@ impl BufPrint<TreeView> for Screen {
 			let area = Rect {
 				x: self.constr.tasks.x,
 				y: self.constr.tasks.y + h as u16,
-				w: self.constr.tasks.w + self.constr.priority.w + self.constr.due_date.w + 2,
+				w: self.constr.tasks.w + self.constr.session.w + self.constr.due_date.w + 2,
 				h: task.height(),
 			};
 
@@ -265,6 +265,8 @@ impl PrintTask for Screen {
 	fn print_task(&mut self, task: &Node, dy: u16, colors: Colors) -> io::Result<()> {
 		self.stdout
 			.queue(SetColors(colors))?
+			.queue(MoveTo(self.constr.session.x, self.constr.session.y + dy))?
+			.queue(Print(Displayable(task.session)))?
 			.queue(MoveTo(self.constr.due_date.x, self.constr.due_date.y + dy))?
 			.queue(Print(Displayable(task.data.due_date)))?;
 
