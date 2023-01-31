@@ -203,21 +203,13 @@ impl Actions for Application {
 	}
 
 	fn move_into(&mut self) -> Result<(), Error> {
-		let Some(node) = self.tree_view.cursor_node() else { return Ok(()) };
-
-		if self.tree_view.is_cursor_at_root() { return Ok(()) }
-
-		self.stack.push(self.root_id);
-		self.root_id = node.id;
-
+		self.tree_view.move_into();
 		self.update_tree_view(SelRetention::Reset)?;
 		Ok(())
 	}
 
 	fn move_out(&mut self) -> Result<(), Error> {
-		let Some(root_id) = self.stack.pop() else { return Ok(()) };
-		self.root_id = root_id;
-
+		self.tree_view.move_out();
 		self.update_tree_view(SelRetention::Reset)?;
 		Ok(())
 	}
@@ -242,7 +234,7 @@ impl Update for Application {
 	fn update_tree_view(&mut self, ret: SelRetention) -> Result<(), Error> {
 		let height = self.screen.tree_height().into();
 		let width = self.screen.tree_width().into();
-		let flattree = build_flattree(self.root_id, &self.store, height, width)?;
+		let flattree = build_flattree(self.tree_view.root_id(), &self.store, height, width)?;
 		self.tree_view.reset(flattree, ret);
 		Ok(())
 	}

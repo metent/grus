@@ -13,8 +13,6 @@ pub struct Application {
 	pub status_view: StatusView,
 	pub tree_view: TreeView,
 	pub mode: Mode,
-	pub root_id: u64,
-	pub stack: Vec<u64>,
 }
 
 impl Application {
@@ -26,10 +24,8 @@ impl Application {
 		let flattree = build_flattree(0, &store, screen.tree_height().into(), screen.tree_width().into())?;
 		let tree_view = TreeView::new(flattree);
 		let mode = Mode::Normal;
-		let root_id = 0;
-		let stack = Vec::new();
 
-		Ok(Application { store, screen, status_view, tree_view, mode, root_id, stack })
+		Ok(Application { store, screen, status_view, tree_view, mode })
 	}
 
 	pub fn run(mut self) -> Result<(), Error> {

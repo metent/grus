@@ -13,11 +13,13 @@ pub struct TreeView {
 	flattree: Vec<Node<'static>>,
 	cursor: usize,
 	selections: HashMap<u64, HashSet<u64>>,
+	pub root_id: u64,
+	pub stack: Vec<u64>,
 }
 
 impl TreeView {
 	pub fn new(flattree: Vec<Node<'static>>) -> Self {
-		TreeView { flattree, cursor: 0, selections: HashMap::new() }
+		TreeView { flattree, cursor: 0, selections: HashMap::new(), root_id: 0, stack: Vec::new() }
 	}
 
 	pub fn reset(&mut self, flattree: Vec<Node<'static>>, ret: SelRetention) {
@@ -84,6 +86,23 @@ impl TreeView {
 		if self.cursor < self.flattree.len() - 1 {
 			self.cursor += 1;
 		}
+	}
+
+	pub fn move_into(&mut self) {
+		let Some(&Node { id, .. }) = self.cursor_node() else { return };
+		if self.is_cursor_at_root() { return };
+
+		self.stack.push(self.root_id);
+		self.root_id = id;
+	}
+
+	pub fn move_out(&mut self) {
+		let Some(root_id) = self.stack.pop() else { return };
+		self.root_id = root_id;
+	}
+
+	pub fn root_id(&self) -> u64 {
+		self.root_id
 	}
 
 	pub fn cursor_node(&self) -> Option<&Node> {
