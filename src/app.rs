@@ -1,18 +1,15 @@
 use std::io;
 use std::path::Path;
-use crossterm::event::{self, KeyCode, Event};
-use crate::actions::{Actions, build_flattree};
 use crate::node::NodeData;
 use crate::store::Store;
-use crate::ui::{Screen, status::StatusView, tree::TreeView};
+use crate::tvc::TreeViewController;
+use crate::ui::Screen;
 use crate::ui::BufPrint;
 
 pub struct Application {
 	pub store: Store,
 	pub screen: Screen,
-	pub status_view: StatusView,
-	pub tree_view: TreeView,
-	pub mode: Mode,
+	pub tvc: TreeViewController,
 }
 
 impl Application {
@@ -20,58 +17,20 @@ impl Application {
 		let root_data = bincode::serialize(&NodeData::with_name("/"))?;
 		let store = Store::open(path, &root_data, n_roots)?;
 		let screen = Screen::init()?;
-		let status_view = StatusView::new();
-		let flattree = build_flattree(0, &store, screen.tree_height().into(), screen.tree_width().into())?;
-		let tree_view = TreeView::new(flattree);
-		let mode = Mode::Normal;
+		let tvc = TreeViewController::new(&store, screen.tree_width(), screen.tree_height())?;
 
-		Ok(Application { store, screen, status_view, tree_view, mode })
+		Ok(Application { store, screen, tvc })
 	}
 
 	pub fn run(mut self) -> Result<(), Error> {
 		self.draw()?;
 
 		loop {
-			match event::read()? {
-				Event::Key(kev) => match self.mode {
-					Mode::Normal => match kev.code {
-						KeyCode::Char('q') => break,
-						KeyCode::Char('j') | KeyCode::Down => self.tree_view.cursor_down(),
-						KeyCode::Char('k') | KeyCode::Up => self.tree_view.cursor_up(),
-						KeyCode::Char('h') | KeyCode::Left => self.move_out()?,
-						KeyCode::Char('l') | KeyCode::Right => self.move_into()?,
-						KeyCode::Char(' ') => self.tree_view.toggle(),
-						KeyCode::Char('.') => self.share()?,
-						KeyCode::Char('p') => self.cut()?,
-						KeyCode::Char('a') => self.enter_command_mode(CommandType::AddChild),
-						KeyCode::Char('r') => self.enter_command_mode(CommandType::Rename),
-						KeyCode::Char('x') => self.enter_command_mode(CommandType::SetDueDate),
-						KeyCode::Char('s') => self.enter_command_mode(CommandType::AddSession),
-						KeyCode::Char('X') => self.unset_due_date()?,
-						KeyCode::Char('K') => self.priority_up()?,
-						KeyCode::Char('J') => self.priority_down()?,
-						KeyCode::Char('d') => self.delete()?,
-						_ => {},
-					}
-					Mode::Command(cmd) => match kev.code {
-						KeyCode::Enter => {
-							match cmd {
-								CommandType::AddChild => self.add_child()?,
-								CommandType::Rename => self.rename()?,
-								CommandType::SetDueDate => self.set_due_date()?,
-								CommandType::AddSession => self.add_session()?,
-							}
-						}
-						KeyCode::Char(c) => self.status_view.insert(c),
-						KeyCode::Backspace => _ = self.status_view.delete(),
-						KeyCode::Left => self.status_view.move_left(),
-						KeyCode::Right => self.status_view.move_right(),
-						KeyCode::Esc => self.cancel(),
-						_ => {},
-					}
-				}
-				Event::Resize(w, h) => self.resize(w, h)?,
-				_ => {},
+			match self.tvc.run(&self.store)? {
+				Action::Switch(_) => {},
+				Action::Quit => break,
+				Action::Resize(w, h) => self.screen.update(w, h),
+				Action::None => {},
 			}
 			self.draw()?;
 		}
@@ -80,19 +39,20 @@ impl Application {
 	}
 
 	fn draw(&mut self) -> io::Result<()> {
-		match self.mode {
-			Mode::Normal => self.screen
-				.clear()?
-				.bufprint(&self.tree_view)?
-				.flush()?,
-			Mode::Command(_) => self.screen
-				.clear()?
-				.bufprint(&self.status_view)?
-				.bufprint(&self.tree_view)?
-				.flush()?,
-		}
+		self.screen.bufprint(&self.tvc)?;
 		Ok(())
 	}
+}
+
+pub enum Action {
+	Quit,
+	Resize(u16, u16),
+	Switch(View),
+	None,
+}
+
+pub enum View {
+	Tree
 }
 
 #[derive(Copy, Clone)]

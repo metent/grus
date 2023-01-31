@@ -1,32 +1,85 @@
 use std::collections::HashSet;
+use std::io;
 use std::str::FromStr;
 use chrono::Local;
+use crossterm::event::{self, KeyCode, Event};
 use interim::{parse_date_string, Dialect};
-use crate::app::{Application, CommandType, Error, Mode};
+use crate::app::{Action, CommandType, Error, Mode};
 use crate::flattree::{FlatTreeBuilder, FlatTreeState};
 use crate::node::{Node, NodeData, Priority, Session, wrap_text};
 use crate::store::{Store, StoreReader};
-use crate::ui::tree::SelRetention;
+use crate::ui::{BufPrint, Screen};
+use crate::ui::tree::{SelRetention, TreeView};
+use crate::ui::status::StatusView;
 
-pub trait Actions {
-	fn enter_command_mode(&mut self, cmd: CommandType);
-	fn add_child(&mut self) -> Result<(), Error>;
-	fn delete(&mut self) -> Result<(), Error>;
-	fn rename(&mut self) -> Result<(), Error>;
-	fn set_due_date(&mut self) -> Result<(), Error>;
-	fn unset_due_date(&mut self) -> Result<(), Error>;
-	fn add_session(&mut self) -> Result<(), Error>;
-	fn priority_up(&mut self) -> Result<(), Error>;
-	fn priority_down(&mut self) -> Result<(), Error>;
-	fn share(&mut self) -> Result<(), Error>;
-	fn cut(&mut self) -> Result<(), Error>;
-	fn move_into(&mut self) -> Result<(), Error>;
-	fn move_out(&mut self) -> Result<(), Error>;
-	fn cancel(&mut self);
-	fn resize(&mut self, width: u16, height: u16) -> Result<(), Error>;
+pub struct TreeViewController {
+	tree_view: TreeView,
+	status_view: StatusView,
+	mode: Mode,
+	width: usize,
+	height: usize,
 }
 
-impl Actions for Application {
+impl TreeViewController {
+	pub fn new(store: &Store, width: u16, height: u16) -> Result<Self, Error> {
+		let flattree = build_flattree(0, &store, height.into(), width.into())?;
+		Ok(TreeViewController {
+			tree_view: TreeView::new(flattree),
+			status_view: StatusView::new(),
+			mode: Mode::Normal,
+			width: width.into(),
+			height: height.into(),
+		})
+	}
+
+	pub fn run(&mut self, store: &Store) -> Result<Action, Error> {
+		match event::read()? {
+			Event::Key(kev) => match self.mode {
+				Mode::Normal => match kev.code {
+					KeyCode::Char('q') => return Ok(Action::Quit),
+					KeyCode::Char('j') | KeyCode::Down => self.tree_view.cursor_down(),
+					KeyCode::Char('k') | KeyCode::Up => self.tree_view.cursor_up(),
+					KeyCode::Char('h') | KeyCode::Left => self.move_out(store)?,
+					KeyCode::Char('l') | KeyCode::Right => self.move_into(store)?,
+					KeyCode::Char(' ') => self.tree_view.toggle(),
+					KeyCode::Char('.') => self.share(store)?,
+					KeyCode::Char('p') => self.cut(store)?,
+					KeyCode::Char('a') => self.enter_command_mode(CommandType::AddChild),
+					KeyCode::Char('r') => self.enter_command_mode(CommandType::Rename),
+					KeyCode::Char('x') => self.enter_command_mode(CommandType::SetDueDate),
+					KeyCode::Char('s') => self.enter_command_mode(CommandType::AddSession),
+					KeyCode::Char('X') => self.unset_due_date(store)?,
+					KeyCode::Char('K') => self.priority_up(store)?,
+					KeyCode::Char('J') => self.priority_down(store)?,
+					KeyCode::Char('d') => self.delete(store)?,
+					_ => {},
+				}
+				Mode::Command(cmd) => match kev.code {
+					KeyCode::Enter => {
+						match cmd {
+							CommandType::AddChild => self.add_child(store)?,
+							CommandType::Rename => self.rename(store)?,
+							CommandType::SetDueDate => self.set_due_date(store)?,
+							CommandType::AddSession => self.add_session(store)?,
+						}
+					}
+					KeyCode::Char(c) => self.status_view.insert(c),
+					KeyCode::Backspace => _ = self.status_view.delete(),
+					KeyCode::Left => self.status_view.move_left(),
+					KeyCode::Right => self.status_view.move_right(),
+					KeyCode::Esc => self.cancel(),
+					_ => {},
+				}
+			}
+			Event::Resize(w, h) => {
+				self.resize(store, w, h)?;
+				return Ok(Action::Resize(w, h));
+			}
+			_ => {},
+		}
+		Ok(Action::None)
+	}
+
 	fn enter_command_mode(&mut self, cmd: CommandType) {
 		let Some(node) = self.tree_view.cursor_node() else { return };
 
@@ -43,14 +96,14 @@ impl Actions for Application {
 		self.status_view.set_title(title);
 	}
 
-	fn add_child(&mut self) -> Result<(), Error> {
+	fn add_child(&mut self, store: &Store) -> Result<(), Error> {
 		let mut selections = self.tree_view.selection_ids();
 		let Some(&first) = selections.next() else { return Ok(()) };
 
 		let name = self.status_view.input();
 		let data = bincode::serialize(&NodeData::with_name(name))?;
 
-		let mut writer = self.store.writer()?;
+		let mut writer = store.writer()?;
 		let id = writer.add_child(first, &data)?;
 
 		for &pid in selections {
@@ -59,27 +112,27 @@ impl Actions for Application {
 		writer.commit()?;
 
 		self.tree_view.clear_selections();
-		self.update_tree_view(SelRetention::SameId)?;
+		self.update_tree_view(store, SelRetention::SameId)?;
 
 		self.cancel();
 		Ok(())
 	}
 
-	fn delete(&mut self) -> Result<(), Error> {
+	fn delete(&mut self, store: &Store) -> Result<(), Error> {
 		let Some(node) = self.tree_view.cursor_node() else { return Ok(()) };
 		if self.tree_view.is_cursor_at_root() { return Ok(()) }
 
-		let mut writer = self.store.writer()?;
+		let mut writer = store.writer()?;
 		writer.delete(node.pid, node.id)?;
 		writer.commit()?;
 
 		self.tree_view.deselect();
-		self.update_tree_view(SelRetention::Parent)?;
+		self.update_tree_view(store, SelRetention::Parent)?;
 		Ok(())
 	}
 
-	fn rename(&mut self) -> Result<(), Error> {
-		let mut writer = self.store.writer()?;
+	fn rename(&mut self, store: &Store) -> Result<(), Error> {
+		let mut writer = store.writer()?;
 		for &id in self.tree_view.selection_ids() {
 			let original = bincode::deserialize(writer.read(id)?.unwrap())?;
 
@@ -91,14 +144,14 @@ impl Actions for Application {
 		writer.commit()?;
 
 		self.tree_view.clear_selections();
-		self.update_tree_view(SelRetention::SameId)?;
+		self.update_tree_view(store, SelRetention::SameId)?;
 
 		self.cancel();
 		Ok(())
 	}
 
-	fn set_due_date(&mut self) -> Result<(), Error> {
-		let mut writer = self.store.writer()?;
+	fn set_due_date(&mut self, store: &Store) -> Result<(), Error> {
+		let mut writer = store.writer()?;
 		for &id in self.tree_view.selection_ids() {
 			let original = bincode::deserialize(writer.read(id)?.unwrap())?;
 
@@ -112,14 +165,14 @@ impl Actions for Application {
 		writer.commit()?;
 
 		self.tree_view.clear_selections();
-		self.update_tree_view(SelRetention::SameId)?;
+		self.update_tree_view(store, SelRetention::SameId)?;
 
 		self.cancel();
 		Ok(())
 	}
 
-	fn unset_due_date(&mut self) -> Result<(), Error> {
-		let mut writer = self.store.writer()?;
+	fn unset_due_date(&mut self, store: &Store) -> Result<(), Error> {
+		let mut writer = store.writer()?;
 		for &id in self.tree_view.selection_ids() {
 			let original = bincode::deserialize(writer.read(id)?.unwrap())?;
 
@@ -130,87 +183,87 @@ impl Actions for Application {
 		writer.commit()?;
 
 		self.tree_view.clear_selections();
-		self.update_tree_view(SelRetention::SameId)?;
+		self.update_tree_view(store, SelRetention::SameId)?;
 		Ok(())
 	}
 
-	fn add_session(&mut self) -> Result<(), Error> {
+	fn add_session(&mut self, store: &Store) -> Result<(), Error> {
 		let Some(node) = self.tree_view.cursor_node() else { return Ok(()) };
 
-		let mut writer = self.store.writer()?;
+		let mut writer = store.writer()?;
 
 		let Ok(session) = Session::from_str(&self.status_view.input()) else { return Ok(()) };
 		writer.add_session(node.id, &session)?;
 		writer.commit()?;
 
-		self.update_tree_view(SelRetention::SameId)?;
+		self.update_tree_view(store, SelRetention::SameId)?;
 		self.cancel();
 		Ok(())
 	}
 
-	fn priority_up(&mut self) -> Result<(), Error> {
+	fn priority_up(&mut self, store: &Store) -> Result<(), Error> {
 		let Some(node) = self.tree_view.cursor_node() else { return Ok(()) };
 
 		if self.tree_view.is_cursor_at_root() { return Ok(()) };
 
-		let mut writer = self.store.writer()?;
+		let mut writer = store.writer()?;
 		writer.move_up(node.pid, node.id)?;
 		writer.commit()?;
 
-		self.update_tree_view(SelRetention::SameId)?;
+		self.update_tree_view(store, SelRetention::SameId)?;
 		Ok(())
 	}
 
-	fn priority_down(&mut self) -> Result<(), Error> {
+	fn priority_down(&mut self, store: &Store) -> Result<(), Error> {
 		let Some(node) = self.tree_view.cursor_node() else { return Ok(()) };
 
 		if self.tree_view.is_cursor_at_root() { return Ok(()) };
 
-		let mut writer = self.store.writer()?;
+		let mut writer = store.writer()?;
 		writer.move_down(node.pid, node.id)?;
 		writer.commit()?;
 
-		self.update_tree_view(SelRetention::SameId)?;
+		self.update_tree_view(store, SelRetention::SameId)?;
 		Ok(())
 	}
 
-	fn share(&mut self) -> Result<(), Error> {
+	fn share(&mut self, store: &Store) -> Result<(), Error> {
 		let Some(node) = self.tree_view.cursor_node() else { return Ok(()) };
 
-		let mut writer = self.store.writer()?;
+		let mut writer = store.writer()?;
 		for &id in self.tree_view.selection_ids() {
 			if !writer.share(id, node.id)? { return Ok(()) };
 		}
 		writer.commit()?;
 
 		self.tree_view.clear_selections();
-		self.update_tree_view(SelRetention::Stay)?;
+		self.update_tree_view(store, SelRetention::Stay)?;
 		Ok(())
 	}
 
-	fn cut(&mut self) -> Result<(), Error> {
+	fn cut(&mut self, store: &Store) -> Result<(), Error> {
 		let Some(node) = self.tree_view.cursor_node() else { return Ok(()) };
 
-		let mut writer = self.store.writer()?;
+		let mut writer = store.writer()?;
 		for (&pid, &id) in self.tree_view.selections() {
 			if !writer.cut(pid, id, node.id)? { return Ok(()) };
 		}
 		writer.commit()?;
 
 		self.tree_view.clear_selections();
-		self.update_tree_view(SelRetention::Stay)?;
+		self.update_tree_view(store, SelRetention::Stay)?;
 		Ok(())
 	}
 
-	fn move_into(&mut self) -> Result<(), Error> {
+	fn move_into(&mut self, store: &Store) -> Result<(), Error> {
 		self.tree_view.move_into();
-		self.update_tree_view(SelRetention::Reset)?;
+		self.update_tree_view(store, SelRetention::Reset)?;
 		Ok(())
 	}
 
-	fn move_out(&mut self) -> Result<(), Error> {
+	fn move_out(&mut self, store: &Store) -> Result<(), Error> {
 		self.tree_view.move_out();
-		self.update_tree_view(SelRetention::Reset)?;
+		self.update_tree_view(store, SelRetention::Reset)?;
 		Ok(())
 	}
 
@@ -219,22 +272,15 @@ impl Actions for Application {
 		self.mode = Mode::Normal;
 	}
 
-	fn resize(&mut self, width: u16, height: u16) -> Result<(), Error> {
-		self.screen.update(width, height);
-		self.update_tree_view(SelRetention::SameId)?;
+	fn resize(&mut self, store: &Store, width: u16, height: u16) -> Result<(), Error> {
+		self.width = width.into();
+		self.height = height.into();
+		self.update_tree_view(store, SelRetention::SameId)?;
 		Ok(())
 	}
-}
 
-trait Update {
-	fn update_tree_view(&mut self, ret: SelRetention) -> Result<(), Error>;
-}
-
-impl Update for Application {
-	fn update_tree_view(&mut self, ret: SelRetention) -> Result<(), Error> {
-		let height = self.screen.tree_height().into();
-		let width = self.screen.tree_width().into();
-		let flattree = build_flattree(self.tree_view.root_id(), &self.store, height, width)?;
+	fn update_tree_view(&mut self, store: &Store, ret: SelRetention) -> Result<(), Error> {
+		let flattree = build_flattree(self.tree_view.root_id(), store, self.height, self.width)?;
 		self.tree_view.reset(flattree, ret);
 		Ok(())
 	}
@@ -304,4 +350,21 @@ fn get_children(
 		};
 	}
 	Ok(children)
+}
+
+impl BufPrint<TreeViewController> for Screen {
+	fn bufprint(&mut self, tvc: &TreeViewController) -> io::Result<&mut Self> {
+		match tvc.mode {
+			Mode::Normal => self
+				.clear()?
+				.bufprint(&tvc.tree_view)?
+				.flush()?,
+			Mode::Command(_) => self
+				.clear()?
+				.bufprint(&tvc.status_view)?
+				.bufprint(&tvc.tree_view)?
+				.flush()?,
+		}
+		Ok(self)
+	}
 }
