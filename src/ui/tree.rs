@@ -7,7 +7,7 @@ use crossterm::QueueableCommand;
 use crossterm::cursor::MoveTo;
 use crossterm::style::{Color, Colors, Print, ResetColor, SetColors, SetForegroundColor};
 use crate::node::{Node, Displayable, Priority};
-use super::{BufPrint, Rect, Screen};
+use super::{BufPrint, Rect, Screen, TreeViewConstraints};
 
 pub struct TreeView {
 	flattree: Vec<Node<'static>>,
@@ -189,14 +189,14 @@ pub enum SelRetention {
 	Reset,
 }
 
-impl BufPrint<TreeView> for Screen {
-	fn bufprint(&mut self, view: &TreeView) -> io::Result<&mut Self> {
+impl BufPrint<TreeView, TreeViewConstraints> for Screen {
+	fn bufprint(&mut self, view: &TreeView, constr: &TreeViewConstraints) -> io::Result<&mut Self> {
 		let mut h = 0;
 		for (i, task) in view.flattree.iter().enumerate() {
 			let area = Rect {
-				x: self.constr.tasks.x,
-				y: self.constr.tasks.y + h as u16,
-				w: self.constr.tasks.w + self.constr.session.w + self.constr.due_date.w + 2,
+				x: constr.tasks.x,
+				y: constr.tasks.y + h as u16,
+				w: constr.tasks.w + constr.session.w + constr.due_date.w + 2,
 				h: task.height(),
 			};
 
@@ -226,15 +226,15 @@ impl BufPrint<TreeView> for Screen {
 
 			match (i == view.cursor, view.is_selected(task.pid, task.id)) {
 				(true, true) =>
-					self.print_task(task, h, Colors::new(Color::White, Color::Blue))?,
+					self.print_task(task, h, Colors::new(Color::White, Color::Blue), constr)?,
 				(true, false) =>
-					self.print_task(task, h, Colors::new(Color::Black, Color::White))?,
+					self.print_task(task, h, Colors::new(Color::Black, Color::White), constr)?,
 				(false, true) =>
-					self.print_task(task, h, Colors::new(Color::White, Color::DarkBlue))?,
+					self.print_task(task, h, Colors::new(Color::White, Color::DarkBlue), constr)?,
 				(false, false) => self.print_task(task, h, Colors {
 					foreground: Some(Color::White),
 					background: None,
-				})?,
+				}, constr)?,
 			}
 			h += task.height();
 		}
@@ -248,18 +248,18 @@ impl BufPrint<TreeView> for Screen {
 				Some(&last) if task.depth < last => {
 					line_pos.pop();
 					if line_pos.last() == Some(&task.depth) {
-						self.print_div_lines(task, h, &line_pos, false, color)?;
+						self.print_div_lines(task, h, &line_pos, false, color, constr)?;
 					} else {
 						line_pos.push(task.depth);
-						self.print_div_lines(task, h, &line_pos, true, color)?;
+						self.print_div_lines(task, h, &line_pos, true, color, constr)?;
 					}
 				}
 				Some(&last) if task.depth == last => {
-					self.print_div_lines(task, h, &line_pos, false, color)?;
+					self.print_div_lines(task, h, &line_pos, false, color, constr)?;
 				}
 				_ => {
 					line_pos.push(task.depth);
-					self.print_div_lines(task, h, &line_pos, true, color)?;
+					self.print_div_lines(task, h, &line_pos, true, color, constr)?;
 				}
 			}
 		}
@@ -269,7 +269,7 @@ impl BufPrint<TreeView> for Screen {
 }
 
 trait PrintTask {
-	fn print_task(&mut self, task: &Node, dy: u16, colors: Colors) -> io::Result<()>;
+	fn print_task(&mut self, task: &Node, dy: u16, colors: Colors, constr: &TreeViewConstraints) -> io::Result<()>;
 	fn print_div_lines(
 		&mut self,
 		task: &Node,
@@ -277,23 +277,24 @@ trait PrintTask {
 		line_pos: &[usize],
 		is_last: bool,
 		color: Color,
+		constr: &TreeViewConstraints,
 	) -> io::Result<()>;
 }
 
 impl PrintTask for Screen {
-	fn print_task(&mut self, task: &Node, dy: u16, colors: Colors) -> io::Result<()> {
+	fn print_task(&mut self, task: &Node, dy: u16, colors: Colors, constr: &TreeViewConstraints) -> io::Result<()> {
 		self.stdout
 			.queue(SetColors(colors))?
-			.queue(MoveTo(self.constr.session.x, self.constr.session.y + dy))?
+			.queue(MoveTo(constr.session.x, constr.session.y + dy))?
 			.queue(Print(Displayable(task.session)))?
-			.queue(MoveTo(self.constr.due_date.x, self.constr.due_date.y + dy))?
+			.queue(MoveTo(constr.due_date.x, constr.due_date.y + dy))?
 			.queue(Print(Displayable(task.data.due_date)))?;
 
 		for (i, split) in task.splits().enumerate() {
 			self.stdout
 				.queue(MoveTo(
-					self.constr.tasks.x + 2 * task.depth as u16 + 1,
-					self.constr.tasks.y + dy + i as u16
+					constr.tasks.x + 2 * task.depth as u16 + 1,
+					constr.tasks.y + dy + i as u16
 				))?
 				.queue(Print(split))?;
 		}
@@ -308,11 +309,12 @@ impl PrintTask for Screen {
 		dy: u16,
 		line_pos: &[usize],
 		is_last: bool,
-		color: Color
+		color: Color,
+		constr: &TreeViewConstraints,
 	) -> io::Result<()> {
 		if task.depth == 0 {
 			self.stdout
-				.queue(MoveTo(self.constr.tasks.x, self.constr.tasks.y))?
+				.queue(MoveTo(constr.tasks.x, constr.tasks.y))?
 				.queue(SetForegroundColor(color_from_prio(&task.priority)))?
 				.queue(Print("•"))?
 				.queue(ResetColor)?;
@@ -320,7 +322,7 @@ impl PrintTask for Screen {
 		}
 
 		for dy in dy..dy + task.height() {
-			self.stdout.queue(MoveTo(self.constr.tasks.x, self.constr.tasks.y + dy))?;
+			self.stdout.queue(MoveTo(constr.tasks.x, constr.tasks.y + dy))?;
 			let mut pos_iter = line_pos.iter();
 			let mut pos = pos_iter.next();
 			for d in 1..task.depth {
@@ -340,7 +342,7 @@ impl PrintTask for Screen {
 
 		let dx = 2 * task.depth as u16 - 2;
 		self.stdout
-			.queue(MoveTo(self.constr.tasks.x + dx, self.constr.tasks.y + dy))?;
+			.queue(MoveTo(constr.tasks.x + dx, constr.tasks.y + dy))?;
 		if color != Color::White {
 			self.stdout.queue(SetForegroundColor(color))?;
 			if is_last {

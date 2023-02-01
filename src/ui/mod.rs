@@ -9,37 +9,11 @@ use crossterm::terminal::{Clear, ClearType};
 
 pub struct Screen {
 	stdout: Stdout,
-	constr: Constraints,
 }
 
 impl Screen {
-	pub fn init() -> io::Result<Self> {
-		let mut screen = Screen { stdout: stdout(), constr: Constraints::default() };
-
-		let (w, h) = terminal::size()?;
-		screen.update(w, h);
-
-		Ok(screen)
-	}
-
-	pub fn update(&mut self, w: u16, h: u16) {
-		if h < 2 { return }
-		self.constr.w = w;
-		self.constr.h = h;
-		self.constr.tasks = Rect { x: 1, y: 1, w: (w - 1) / 2, h: h - 2 };
-		self.constr.session = Rect {
-			x: self.constr.tasks.x + self.constr.tasks.w + 1,
-			y: 1,
-			w: (w - 1) / 3,
-			h: h - 2
-		};
-		self.constr.due_date = Rect {
-			x: self.constr.session.x + self.constr.session.w + 1,
-			y: 1,
-			w: w.saturating_sub(4 + self.constr.tasks.w + self.constr.session.w),
-			h: h - 2
-		};
-		self.constr.status = Rect { x: 0, y: h - 1, w, h: 1 };
+	pub fn new() -> io::Result<Self> {
+		Ok(Screen { stdout: stdout() })
 	}
 
 	pub fn paint(&mut self, area: Rect, colors: Colors) -> io::Result<()> {
@@ -53,18 +27,6 @@ impl Screen {
 		Ok(())
 	}
 
-	pub fn height(&self) -> u16 {
-		self.constr.h
-	}
-
-	pub fn tree_width(&self) -> u16 {
-		self.constr.tasks.w
-	}
-
-	pub fn tree_height(&self) -> u16 {
-		self.constr.tasks.h
-	}
-
 	pub fn clear(&mut self) -> io::Result<&mut Self> {
 		self.stdout.execute(Clear(ClearType::All))?;
 		Ok(self)
@@ -75,18 +37,75 @@ impl Screen {
 	}
 }
 
-pub trait BufPrint<T> {
-	fn bufprint(&mut self, view: &T) -> io::Result<&mut Self>;
+pub trait BufPrint<V, C> {
+	fn bufprint(&mut self, view: &V, constr: &C) -> io::Result<&mut Self>;
 }
 
 #[derive(Default)]
-pub struct Constraints {
+pub struct TreeViewConstraints {
 	w: u16,
 	h: u16,
 	tasks: Rect,
 	session: Rect,
 	due_date: Rect,
+}
+
+impl TreeViewConstraints {
+	pub fn new() -> io::Result<Self> {
+		let mut constr = TreeViewConstraints::default();
+		let (w, h) = terminal::size()?;
+		constr.update(w, h);
+		Ok(constr)
+	}
+
+	pub fn update(&mut self, w: u16, h: u16) {
+		if h < 2 { return }
+		self.w = w;
+		self.h = h;
+		self.tasks = Rect { x: 1, y: 1, w: (w - 1) / 2, h: h - 2 };
+		self.session = Rect {
+			x: self.tasks.x + self.tasks.w + 1,
+			y: 1,
+			w: (w - 1) / 3,
+			h: h - 2
+		};
+		self.due_date = Rect {
+			x: self.session.x + self.session.w + 1,
+			y: 1,
+			w: w.saturating_sub(4 + self.tasks.w + self.session.w),
+			h: h - 2
+		};
+	}
+
+	pub fn height(&self) -> u16 {
+		self.h
+	}
+
+	pub fn tree_width(&self) -> usize {
+		self.tasks.w.into()
+	}
+
+	pub fn tree_height(&self) -> usize {
+		self.tasks.h.into()
+	}
+}
+
+#[derive(Default)]
+pub struct StatusViewConstraints {
 	status: Rect,
+}
+
+impl StatusViewConstraints {
+	pub fn new() -> io::Result<Self> {
+		let mut constr = StatusViewConstraints::default();
+		let (w, h) = terminal::size()?;
+		constr.update(w, h);
+		Ok(constr)
+	}
+
+	pub fn update(&mut self, w: u16, h: u16) {
+		self.status = Rect { x: 0, y: h - 1, w, h: 1 };
+	}
 }
 
 #[derive(Default)]

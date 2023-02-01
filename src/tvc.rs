@@ -8,27 +8,28 @@ use crate::app::{Action, CommandType, Error, Mode};
 use crate::flattree::{FlatTreeBuilder, FlatTreeState};
 use crate::node::{Node, NodeData, Priority, Session, wrap_text};
 use crate::store::{Store, StoreReader};
-use crate::ui::{BufPrint, Screen};
+use crate::ui::{BufPrint, Screen, StatusViewConstraints, TreeViewConstraints};
 use crate::ui::tree::{SelRetention, TreeView};
 use crate::ui::status::StatusView;
 
 pub struct TreeViewController {
 	tree_view: TreeView,
+	tvconstr: TreeViewConstraints,
 	status_view: StatusView,
+	svconstr: StatusViewConstraints,
 	mode: Mode,
-	width: usize,
-	height: usize,
 }
 
 impl TreeViewController {
-	pub fn new(store: &Store, width: u16, height: u16) -> Result<Self, Error> {
-		let flattree = build_flattree(0, &store, height.into(), width.into())?;
+	pub fn new(store: &Store) -> Result<Self, Error> {
+		let tvconstr = TreeViewConstraints::new()?;
+		let flattree = build_flattree(0, &store, tvconstr.tree_width(), tvconstr.tree_height())?;
 		Ok(TreeViewController {
 			tree_view: TreeView::new(flattree),
+			tvconstr,
 			status_view: StatusView::new(),
+			svconstr: StatusViewConstraints::new()?,
 			mode: Mode::Normal,
-			width: width.into(),
-			height: height.into(),
 		})
 	}
 
@@ -71,10 +72,7 @@ impl TreeViewController {
 					_ => {},
 				}
 			}
-			Event::Resize(w, h) => {
-				self.resize(store, w, h)?;
-				return Ok(Action::Resize(w, h));
-			}
+			Event::Resize(w, h) => self.resize(store, w, h)?,
 			_ => {},
 		}
 		Ok(Action::None)
@@ -272,15 +270,14 @@ impl TreeViewController {
 		self.mode = Mode::Normal;
 	}
 
-	fn resize(&mut self, store: &Store, width: u16, height: u16) -> Result<(), Error> {
-		self.width = width.into();
-		self.height = height.into();
+	fn resize(&mut self, store: &Store, w: u16, h: u16) -> Result<(), Error> {
+		self.tvconstr.update(w, h);
 		self.update_tree_view(store, SelRetention::SameId)?;
 		Ok(())
 	}
 
 	fn update_tree_view(&mut self, store: &Store, ret: SelRetention) -> Result<(), Error> {
-		let flattree = build_flattree(self.tree_view.root_id(), store, self.height, self.width)?;
+		let flattree = build_flattree(self.tree_view.root_id(), store, self.tvconstr.tree_height(), self.tvconstr.tree_width())?;
 		self.tree_view.reset(flattree, ret);
 		Ok(())
 	}
@@ -352,17 +349,17 @@ fn get_children(
 	Ok(children)
 }
 
-impl BufPrint<TreeViewController> for Screen {
-	fn bufprint(&mut self, tvc: &TreeViewController) -> io::Result<&mut Self> {
+impl BufPrint<TreeViewController, ()> for Screen {
+	fn bufprint(&mut self, tvc: &TreeViewController, _: &()) -> io::Result<&mut Self> {
 		match tvc.mode {
 			Mode::Normal => self
 				.clear()?
-				.bufprint(&tvc.tree_view)?
+				.bufprint(&tvc.tree_view, &tvc.tvconstr)?
 				.flush()?,
 			Mode::Command(_) => self
 				.clear()?
-				.bufprint(&tvc.status_view)?
-				.bufprint(&tvc.tree_view)?
+				.bufprint(&tvc.status_view, &tvc.svconstr)?
+				.bufprint(&tvc.tree_view, &tvc.tvconstr)?
 				.flush()?,
 		}
 		Ok(self)

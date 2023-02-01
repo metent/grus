@@ -16,8 +16,8 @@ impl Application {
 	pub fn init<P: AsRef<Path>>(path: P, n_roots: usize) -> Result<Self, Error> {
 		let root_data = bincode::serialize(&NodeData::with_name("/"))?;
 		let store = Store::open(path, &root_data, n_roots)?;
-		let screen = Screen::init()?;
-		let tvc = TreeViewController::new(&store, screen.tree_width(), screen.tree_height())?;
+		let screen = Screen::new()?;
+		let tvc = TreeViewController::new(&store)?;
 
 		Ok(Application { store, screen, tvc })
 	}
@@ -29,7 +29,6 @@ impl Application {
 			match self.tvc.run(&self.store)? {
 				Action::Switch(_) => {},
 				Action::Quit => break,
-				Action::Resize(w, h) => self.screen.update(w, h),
 				Action::None => {},
 			}
 			self.draw()?;
@@ -39,14 +38,13 @@ impl Application {
 	}
 
 	fn draw(&mut self) -> io::Result<()> {
-		self.screen.bufprint(&self.tvc)?;
+		self.screen.bufprint(&self.tvc, &())?;
 		Ok(())
 	}
 }
 
 pub enum Action {
 	Quit,
-	Resize(u16, u16),
 	Switch(View),
 	None,
 }

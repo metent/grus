@@ -3,7 +3,7 @@ use std::fmt::{self, Display, Formatter};
 use crossterm::QueueableCommand;
 use crossterm::cursor::MoveTo;
 use crossterm::style::{Color, Colors, Print, ResetColor, SetColors};
-use super::{BufPrint, Screen};
+use super::{BufPrint, Screen, StatusViewConstraints};
 
 pub struct StatusView {
 	input: Input,
@@ -68,10 +68,10 @@ struct Input {
 	back: String,
 }
 
-impl BufPrint<StatusView> for Screen {
-	fn bufprint(&mut self, view: &StatusView) -> io::Result<&mut Self> {
+impl BufPrint<StatusView, StatusViewConstraints> for Screen {
+	fn bufprint(&mut self, view: &StatusView, constr: &StatusViewConstraints) -> io::Result<&mut Self> {
 		self.stdout
-			.queue(MoveTo(self.constr.status.x, self.constr.status.y))?
+			.queue(MoveTo(constr.status.x, constr.status.y))?
 			.queue(Print(view.title))?
 			.queue(Print(&view.input.front))?
 			.queue(SetColors(Colors::new(Color::Black, Color::White)))?
