@@ -1,3 +1,4 @@
+pub mod session;
 pub mod status;
 pub mod tree;
 
@@ -87,6 +88,36 @@ impl TreeViewConstraints {
 
 	pub fn tree_height(&self) -> usize {
 		self.tasks.h.into()
+	}
+}
+
+#[derive(Default)]
+pub struct SessionViewConstraints {
+	session: Rect,
+	tasks: Rect,
+}
+
+impl SessionViewConstraints {
+	pub fn new() -> io::Result<Self> {
+		let mut constr = SessionViewConstraints::default();
+		let (w, h) = terminal::size()?;
+		constr.update(w, h);
+		Ok(constr)
+	}
+
+	pub fn update(&mut self, w: u16, h: u16) {
+		if h < 2 { return };
+		self.session = Rect { x: 1, y: 1, w: (w - 1) / 2, h: h - 2 };
+		self.tasks = Rect {
+			x: self.session.x + self.session.w + 1,
+			y: 1,
+			w: (w - 1) / 2,
+			h: h - 2,
+		};
+	}
+
+	pub fn session_height(&self) -> usize {
+		self.session.h.into()
 	}
 }
 

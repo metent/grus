@@ -4,7 +4,7 @@ use std::str::FromStr;
 use chrono::Local;
 use crossterm::event::{self, KeyCode, Event};
 use interim::{parse_date_string, Dialect};
-use crate::app::{Action, CommandType, Error, Mode};
+use crate::app::{Action, CommandType, Error, Mode, View};
 use crate::flattree::{FlatTreeBuilder, FlatTreeState};
 use crate::node::{Node, NodeData, Priority, Session, wrap_text};
 use crate::store::{Store, StoreReader};
@@ -53,6 +53,7 @@ impl TreeViewController {
 					KeyCode::Char('K') => self.priority_up(store)?,
 					KeyCode::Char('J') => self.priority_down(store)?,
 					KeyCode::Char('d') => self.delete(store)?,
+					KeyCode::Char('2') => return Ok(Action::Switch(View::Session)),
 					_ => {},
 				}
 				Mode::Command(cmd) => match kev.code {
@@ -76,6 +77,13 @@ impl TreeViewController {
 			_ => {},
 		}
 		Ok(Action::None)
+	}
+
+	pub fn resize(&mut self, store: &Store, w: u16, h: u16) -> Result<(), Error> {
+		self.tvconstr.update(w, h);
+		self.svconstr.update(w, h);
+		self.update_tree_view(store, SelRetention::SameId)?;
+		Ok(())
 	}
 
 	fn enter_command_mode(&mut self, cmd: CommandType) {
@@ -268,12 +276,6 @@ impl TreeViewController {
 	fn cancel(&mut self) {
 		self.status_view.clear();
 		self.mode = Mode::Normal;
-	}
-
-	fn resize(&mut self, store: &Store, w: u16, h: u16) -> Result<(), Error> {
-		self.tvconstr.update(w, h);
-		self.update_tree_view(store, SelRetention::SameId)?;
-		Ok(())
 	}
 
 	fn update_tree_view(&mut self, store: &Store, ret: SelRetention) -> Result<(), Error> {

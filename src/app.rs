@@ -1,7 +1,9 @@
 use std::io;
 use std::path::Path;
+use crossterm::terminal;
 use crate::node::NodeData;
 use crate::store::Store;
+use crate::svc::SessionViewController;
 use crate::tvc::TreeViewController;
 use crate::ui::Screen;
 use crate::ui::BufPrint;
@@ -10,6 +12,8 @@ pub struct Application {
 	pub store: Store,
 	pub screen: Screen,
 	pub tvc: TreeViewController,
+	pub svc: SessionViewController,
+	pub view: View,
 }
 
 impl Application {
@@ -18,18 +22,35 @@ impl Application {
 		let store = Store::open(path, &root_data, n_roots)?;
 		let screen = Screen::new()?;
 		let tvc = TreeViewController::new(&store)?;
+		let svc = SessionViewController::new(&store)?;
+		let view = View::Tree;
 
-		Ok(Application { store, screen, tvc })
+		Ok(Application { store, screen, tvc, svc, view })
 	}
 
 	pub fn run(mut self) -> Result<(), Error> {
 		self.draw()?;
 
 		loop {
-			match self.tvc.run(&self.store)? {
-				Action::Switch(_) => {},
+			match match self.view {
+				View::Tree => self.tvc.run(&self.store)?,
+				View::Session => self.svc.run(&self.store)?,
+			} {
+				Action::Switch(view) => match view {
+					View::Tree => {
+						self.view = view;
+						let (w, h) = terminal::size()?;
+						self.tvc.resize(&self.store, w, h)?;
+					}
+					View::Session => {
+						self.view = view;
+						let (w, h) = terminal::size()?;
+						self.svc.resize(w, h);
+						self.svc.update_session_view(&self.store)?;
+					}
+				}
 				Action::Quit => break,
-				Action::None => {},
+				Action::None => {}
 			}
 			self.draw()?;
 		}
@@ -38,7 +59,10 @@ impl Application {
 	}
 
 	fn draw(&mut self) -> io::Result<()> {
-		self.screen.bufprint(&self.tvc, &())?;
+		match self.view {
+			View::Tree => self.screen.bufprint(&self.tvc, &())?,
+			View::Session => self.screen.bufprint(&self.svc, &())?,
+		};
 		Ok(())
 	}
 }
@@ -50,7 +74,8 @@ pub enum Action {
 }
 
 pub enum View {
-	Tree
+	Tree,
+	Session,
 }
 
 #[derive(Copy, Clone)]
