@@ -1,7 +1,7 @@
 use std::io;
 use crossterm::event::{self, KeyCode, Event};
 use crate::app::{Action, Error, Mode, View};
-use crate::node::NodeData;
+use crate::node::{wrap_text, NodeData};
 use crate::store::Store;
 use crate::ui::{BufPrint, Screen, SessionViewConstraints, StatusViewConstraints};
 use crate::ui::session::{Item, SessionView};
@@ -57,7 +57,7 @@ impl SessionViewController {
 	pub fn resize(&mut self, w: u16, h: u16) {
 		self.ssvconstr.update(w, h);
 		self.svconstr.update(w, h);
-		self.session_view.resize(self.ssvconstr.session_height());
+		self.session_view.resize(self.ssvconstr.session_height(), self.ssvconstr.tasks_width());
 	}
 
 	pub fn update_session_view(&mut self, store: &Store) -> Result<(), Error> {
@@ -67,7 +67,8 @@ impl SessionViewController {
 			let (&session, &id) = entry?;
 			let Some(data) = reader.read(id)? else { continue };
 			let NodeData { name, .. } = bincode::deserialize(data)?;
-			items.push(Item { session, id, name: name.into() });
+			let name_splits = wrap_text(&name, self.ssvconstr.tasks_width());
+			items.push(Item { session, id, name: name.into(), name_splits });
 		}
 		self.session_view = SessionView::new(items, self.ssvconstr.session_height());
 		Ok(())

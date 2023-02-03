@@ -106,18 +106,22 @@ impl SessionViewConstraints {
 	}
 
 	pub fn update(&mut self, w: u16, h: u16) {
-		if h < 2 { return };
-		self.session = Rect { x: 1, y: 1, w: (w - 1) / 2, h: h - 2 };
+		if h < 2 || w < 2 { return };
+		self.session = Rect { x: 1, y: 1, w: (w - 2) / 2, h: h - 2 };
 		self.tasks = Rect {
 			x: self.session.x + self.session.w + 1,
 			y: 1,
-			w: (w - 1) / 2,
+			w: w - 2 - self.session.w,
 			h: h - 2,
 		};
 	}
 
-	pub fn session_height(&self) -> usize {
+	pub fn session_height(&self) -> u16 {
 		self.session.h.into()
+	}
+
+	pub fn tasks_width(&self) -> usize {
+		self.tasks.w.into()
 	}
 }
 
