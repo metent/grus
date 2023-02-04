@@ -117,11 +117,15 @@ impl SessionViewConstraints {
 	}
 
 	pub fn session_height(&self) -> u16 {
-		self.session.h.into()
+		self.session.h
 	}
 
 	pub fn tasks_width(&self) -> usize {
 		self.tasks.w.into()
+	}
+
+	pub fn session_width(&self) -> usize {
+		self.session.w.into()
 	}
 }
 

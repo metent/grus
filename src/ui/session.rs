@@ -1,9 +1,10 @@
+use std::cmp::max;
 use std::io;
 use std::ops::Range;
 use crossterm::QueueableCommand;
 use crossterm::cursor::MoveTo;
 use crossterm::style::{Color, Colors, Print, ResetColor, SetColors};
-use crate::node::{wrap_text, Displayable, Session};
+use crate::node::{wrap_text, Session};
 use super::{BufPrint, Rect, Screen, SessionViewConstraints};
 
 pub struct SessionView {
@@ -20,9 +21,10 @@ impl SessionView {
 		sv
 	}
 
-	pub fn resize(&mut self, len: u16, tasks_width: usize) {
+	pub fn resize(&mut self, len: u16, tasks_width: usize, session_width: usize) {
 		for item in self.items.iter_mut() {
 			item.name_splits = wrap_text(&item.name, tasks_width);
+			item.session_splits = wrap_text(&item.session_text, session_width);
 		}
 		self.anchor_top(self.start, len);
 	}
@@ -90,15 +92,21 @@ pub struct Item {
 	pub id: u64,
 	pub name: String,
 	pub name_splits: Vec<usize>,
+	pub session_text: String,
+	pub session_splits: Vec<usize>,
 }
 
 impl Item {
-	pub fn splits(&self) -> impl Iterator<Item = &str> {
+	pub fn name_splits(&self) -> impl Iterator<Item = &str> {
 		self.name_splits.windows(2).map(|w| &self.name[w[0]..w[1]])
 	}
 
+	pub fn session_splits(&self) -> impl Iterator<Item = &str> {
+		self.session_splits.windows(2).map(|w| &self.session_text[w[0]..w[1]])
+	}
+
 	fn height(&self) -> u16 {
-		(self.name_splits.len() - 1) as _
+		max(self.session_splits.len() - 1, self.name_splits.len() - 1) as _
 	}
 }
 
@@ -140,12 +148,15 @@ trait PrintItem {
 
 impl PrintItem for Screen {
 	fn print_item(&mut self, item: &Item, dy: u16, colors: Colors, constr: &SessionViewConstraints) -> io::Result<()> {
-		self.stdout
-			.queue(SetColors(colors))?
-			.queue(MoveTo(constr.session.x, constr.session.y + dy))?
-			.queue(Print(Displayable(Some(item.session))))?;
+		self.stdout.queue(SetColors(colors))?;
 
-		for (i, split) in item.splits().enumerate() {
+		for (i, split) in item.session_splits().enumerate() {
+			self.stdout
+				.queue(MoveTo(constr.session.x, constr.session.y + dy + i as u16))?
+				.queue(Print(split))?;
+		}
+
+		for (i, split) in item.name_splits().enumerate() {
 			self.stdout
 				.queue(MoveTo(constr.tasks.x, constr.tasks.y + dy + i as u16))?
 				.queue(Print(split))?;

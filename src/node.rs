@@ -106,6 +106,7 @@ impl Display for Displayable<Session> {
 }
 
 pub fn wrap_text(text: &str, w: usize) -> Vec<usize> {
+	if w == 0 { return vec![0, 0] };
 	let mut splits = vec![];
 	let mut i = 0;
 	let mut beg = 0;
