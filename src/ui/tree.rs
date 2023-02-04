@@ -33,7 +33,9 @@ impl TreeView {
 				}
 			}
 			SelRetention::SameId => if let Some(&Node { id, pid, .. }) = self.cursor_node() {
-				if let Some(cursor) = flattree.iter().position(|node| node.id == id) {
+				if let Some(cursor) = flattree.iter().position(|node| node.id == id && node.pid == pid) {
+					self.cursor = cursor;
+				} else if let Some(cursor) = flattree.iter().position(|node| node.id == id) {
 					self.cursor = cursor;
 				} else if let Some(cursor) = flattree.iter().position(|node| node.id == pid) {
 					self.cursor = cursor;
