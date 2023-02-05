@@ -53,6 +53,10 @@ impl SessionView {
 		}
 	}
 
+	pub fn session_and_id(&self) -> Option<(u64, &Session)> {
+		self.items.get(self.cursor).map(|Item { id, session, .. }| (*id, session))
+	}
+
 	fn anchor_top(&mut self, index: usize, len: u16) {
 		self.heights.clear();
 		let mut h = 0;

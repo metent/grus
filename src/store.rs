@@ -229,6 +229,12 @@ impl<'env> StoreWriter<'env> {
 		self.delete_helper(pid, id)
 	}
 
+	pub fn delete_session(&mut self, id: u64, session: &Session) -> Result<(), Error> {
+		btree::del(&mut self.txn, &mut self.sessions, &id, Some(session))?;
+		btree::del(&mut self.txn, &mut self.rsessions, session, Some(&id))?;
+		Ok(())
+	}
+
 	pub fn modify(&mut self, id: u64, data: &[u8]) -> Result<(), Error> {
 		btree::del(&mut self.txn, &mut self.nodes, &id, None)?;
 		btree::put(&mut self.txn, &mut self.nodes, &id, data)?;

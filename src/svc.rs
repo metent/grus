@@ -36,6 +36,7 @@ impl SessionViewController {
 					KeyCode::Char('q') => return Ok(Action::Quit),
 					KeyCode::Char('j') | KeyCode::Down => self.session_view.cursor_down(),
 					KeyCode::Char('k') | KeyCode::Up => self.session_view.cursor_up(),
+					KeyCode::Char('d') => self.delete(store)?,
 					KeyCode::Char('1') => return Ok(Action::Switch(View::Tree)),
 					_ => {},
 				}
@@ -73,6 +74,17 @@ impl SessionViewController {
 			items.push(Item { session, id, name: name.into(), name_splits, session_text, session_splits });
 		}
 		self.session_view = SessionView::new(items, self.ssvconstr.session_height());
+		Ok(())
+	}
+
+	fn delete(&mut self, store: &Store) -> Result<(), Error> {
+		let Some((id, session)) = self.session_view.session_and_id() else { return Ok(()) };
+
+		let mut writer = store.writer()?;
+		writer.delete_session(id, session)?;
+		writer.commit()?;
+
+		self.update_session_view(store)?;
 		Ok(())
 	}
 
