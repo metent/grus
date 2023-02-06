@@ -42,6 +42,7 @@ impl SessionView {
 	}
 
 	pub fn cursor_down(&mut self) {
+		if self.items.is_empty() { return }
 		if self.cursor + 1 < self.start {
 			if self.cursor + 1 < self.items.len() { self.cursor += 1 };
 			self.anchor_top(self.cursor, self.height());
