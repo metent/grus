@@ -242,26 +242,31 @@ impl BufPrint<TreeView, TreeViewConstraints> for Screen {
 		}
 
 		let mut line_pos = Vec::new();
+		let mut prev_depth = 0;
 		for task in view.flattree.iter().rev() {
 			h -= task.height();
 
 			let color = *color_map.get(&task.id).unwrap();
+
+			let is_next_child = prev_depth == task.depth + 1;
+			prev_depth = task.depth;
+
 			match line_pos.last() {
 				Some(&last) if task.depth < last => {
 					line_pos.pop();
 					if line_pos.last() == Some(&task.depth) {
-						self.print_div_lines(task, h, &line_pos, false, color, constr)?;
+						self.print_div_lines(task, h, &line_pos, false, is_next_child, color, constr)?;
 					} else {
 						line_pos.push(task.depth);
-						self.print_div_lines(task, h, &line_pos, true, color, constr)?;
+						self.print_div_lines(task, h, &line_pos, true, is_next_child, color, constr)?;
 					}
 				}
 				Some(&last) if task.depth == last => {
-					self.print_div_lines(task, h, &line_pos, false, color, constr)?;
+					self.print_div_lines(task, h, &line_pos, false, is_next_child, color, constr)?;
 				}
 				_ => {
 					line_pos.push(task.depth);
-					self.print_div_lines(task, h, &line_pos, true, color, constr)?;
+					self.print_div_lines(task, h, &line_pos, true, is_next_child, color, constr)?;
 				}
 			}
 		}
@@ -278,6 +283,7 @@ trait PrintTask {
 		dy: u16,
 		line_pos: &[usize],
 		is_last: bool,
+		next_is_child: bool,
 		color: Color,
 		constr: &TreeViewConstraints,
 	) -> io::Result<()>;
@@ -311,10 +317,17 @@ impl PrintTask for Screen {
 		dy: u16,
 		line_pos: &[usize],
 		is_last: bool,
+		next_is_child: bool,
 		color: Color,
 		constr: &TreeViewConstraints,
 	) -> io::Result<()> {
 		if task.depth == 0 {
+			if next_is_child {
+				for dy in dy..dy + task.height() {
+					self.stdout.queue(MoveTo(constr.tasks.x, constr.tasks.y + dy))?;
+					self.stdout.queue(Print("│"))?;
+				}
+			}
 			self.stdout
 				.queue(MoveTo(constr.tasks.x, constr.tasks.y))?
 				.queue(SetForegroundColor(color_from_prio(&task.priority)))?
@@ -336,9 +349,14 @@ impl PrintTask for Screen {
 				}
 			}
 			if is_last {
-				self.stdout.queue(Print("   "))?;
+				self.stdout.queue(Print("  "))?;
 			} else {
-				self.stdout.queue(Print("│  "))?;
+				self.stdout.queue(Print("│ "))?;
+			}
+			if next_is_child {
+				self.stdout.queue(Print("│"))?;
+			} else {
+				self.stdout.queue(Print(" "))?;
 			}
 		}
 
