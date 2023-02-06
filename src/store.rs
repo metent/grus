@@ -355,6 +355,7 @@ impl<'env> StoreWriter<'env> {
 		}
 
 		btree::del(&mut self.txn, &mut self.nodes, &id, None)?;
+		self.delete_id_sessions(id)?;
 
 		let mut child_ids = ChildIds::new(self, id)?;
 		if let Some(first) = child_ids.next(self)? {
@@ -373,6 +374,14 @@ impl<'env> StoreWriter<'env> {
 			if self.is_descendent_of(subj, child_id?)? { return Ok(true) };
 		}
 		Ok(false)
+	}
+
+	fn delete_id_sessions(&mut self, id: u64) -> Result<(), Error> {
+		while let Some((&eid, &session)) = btree::get(&self.txn, &self.sessions, &id, None)? {
+			if eid != id { break };
+			self.delete_session(id, &session)?;
+		}
+		Ok(())
 	}
 }
 
