@@ -95,78 +95,12 @@ mod tests {
 	#[test]
 	fn build_flattree() {
 		let nodes = [
-			Node {
-				id: 0,
-				pid: 0,
-				depth: 0,
-				data: NodeData {
-					name: "/".into(),
-					..NodeData::default()
-				},
-				session: Some(Session::default()),
-				priority: Priority { det: 0, total: 1 },
-				splits: vec![0, 1],
-			},
-			Node {
-				id: 1,
-				pid: 0,
-				depth: 1,
-				data: NodeData {
-					name: "a".into(),
-					..NodeData::default()
-				},
-				session: Some(Session::default()),
-				priority: Priority { det: 0, total: 3 },
-				splits: vec![0, 1],
-			},
-			Node {
-				id: 4,
-				pid: 1,
-				depth: 2,
-				data: NodeData {
-					name: "x".into(),
-					..NodeData::default()
-				},
-				session: Some(Session::default()),
-				priority: Priority { det: 0, total: 2 },
-				splits: vec![0, 1],
-			},
-			Node {
-				id: 5,
-				pid: 1,
-				depth: 2,
-				data: NodeData {
-					name: "y".into(),
-					..NodeData::default()
-				},
-				session: Some(Session::default()),
-				priority: Priority { det: 1, total: 2 },
-				splits: vec![0, 1],
-			},
-			Node {
-				id: 3,
-				pid: 0,
-				depth: 1,
-				data: NodeData {
-					name: "b".into(),
-					..NodeData::default()
-				},
-				session: Some(Session::default()),
-				priority: Priority { det: 1, total: 3 },
-				splits: vec![0, 1],
-			},
-			Node {
-				id: 2,
-				pid: 0,
-				depth: 1,
-				data: NodeData {
-					name: "c".into(),
-					..NodeData::default()
-				},
-				session: Some(Session::default()),
-				priority: Priority { det: 2, total: 3 },
-				splits: vec![0, 1],
-			},
+			create_node(0, 0, "/", Priority { det: 0, total: 1 }),
+			create_node(0, 1, "a", Priority { det: 0, total: 3 }),
+			create_node(1, 4, "x", Priority { det: 0, total: 2 }),
+			create_node(1, 5, "y", Priority { det: 1, total: 2 }),
+			create_node(0, 3, "b", Priority { det: 1, total: 3 }),
+			create_node(0, 2, "c", Priority { det: 2, total: 3 }),
 		];
 		let first_level_nodes = vec![nodes[5].clone(), nodes[1].clone(), nodes[4].clone()];
 		let a_children = vec![nodes[2].clone(), nodes[3].clone()];
@@ -209,4 +143,22 @@ mod tests {
 		assert_eq!(builder.finish(), nodes);
 	}
 
+	fn create_node(pid: u64, id: u64, name: &'static str, pri: Priority) -> Node<'static> {
+		Node {
+			id,
+			pid,
+			depth: 0,
+			data: NodeData {
+				name: name.into(),
+				..NodeData::default()
+			},
+			session: Some(Session::default()),
+			priority: pri,
+			name_splits: vec![0, 1],
+			session_text: "".into(),
+			session_splits: vec![0, 0],
+			due_date_text: "".into(),
+			due_date_splits: vec![0, 0],
+		}
+	}
 }

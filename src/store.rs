@@ -432,15 +432,17 @@ mod tests {
 		writer.commit()?;
 
 		let reader = store.reader()?;
-		let mut iter = reader.children(0)?;
+		let mut iter = reader.child_ids(0)?;
 
-		let (id, data) = iter.next().unwrap()?;
+		let id = iter.next().unwrap()?;
+		let data = reader.read(id)?.unwrap();
 		assert_eq!(id, 1);
 		assert_eq!(data, &[10, 20]);
 		assert!(iter.next().is_none());
 
-		let mut iter = reader.children(1)?;
-		let (id, data) = iter.next().unwrap()?;
+		let mut iter = reader.child_ids(1)?;
+		let id = iter.next().unwrap()?;
+		let data = reader.read(id)?.unwrap();
 		assert_eq!(id, 2);
 		assert_eq!(data, &[30, 20]);
 		assert!(iter.next().is_none());
