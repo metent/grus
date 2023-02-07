@@ -121,11 +121,11 @@ impl<T: LoadPage<Error = Error>> StoreRw<T> {
 		}
 	}
 
-	pub fn children<'s>(&'s self, id: u64) -> Result<impl Iterator<Item = Result<(u64, &'s[u8]), Error>>, Error> {
-		Ok(self.child_ids(id)?.map(|child_id| match btree::get(&self.txn, &self.nodes, &child_id?, None)? {
-			Some((&child_id, data)) => Ok((child_id, data)),
-			None => Err(invalid_data_error()),
-		}))
+	pub fn child_ids(&self, id: u64) -> Result<ChildIdIter<'_, T>, Error> {
+		Ok(ChildIdIter {
+			reader: self,
+			child_ids: ChildIds::new(self, id)?,
+		})
 	}
 
 	pub fn sessions<'s>(&'s self, id: u64) -> Result<impl Iterator<Item = Result<(&'s u64, &'s Session), Error>>, Error> {
@@ -138,13 +138,6 @@ impl<T: LoadPage<Error = Error>> StoreRw<T> {
 
 	pub fn all_sessions<'s>(&'s self) -> Result<impl Iterator<Item = Result<(&'s Session, &'s u64), Error>>, Error> {
 		btree::iter(&self.txn, &self.rsessions, None)
-	}
-
-	fn child_ids(&self, id: u64) -> Result<ChildIdIter<'_, T>, Error> {
-		Ok(ChildIdIter {
-			reader: self,
-			child_ids: ChildIds::new(self, id)?,
-		})
 	}
 
 	fn get_child(&self, id: u64) -> Result<Option<u64>, Error> {
