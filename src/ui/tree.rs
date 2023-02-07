@@ -6,7 +6,7 @@ use std::iter;
 use crossterm::QueueableCommand;
 use crossterm::cursor::MoveTo;
 use crossterm::style::{Color, Colors, Print, ResetColor, SetColors, SetForegroundColor};
-use crate::node::{Node, Displayable, Priority};
+use crate::node::{Node, Priority};
 use super::{BufPrint, Rect, Screen, TreeViewConstraints};
 
 pub struct TreeView {
@@ -225,7 +225,7 @@ impl<'screen, 'view, 'constr> TreeViewPainter<'screen, 'view, 'constr> {
 				color_map.insert(task.id, Color::White);
 			}
 
-			h += task.height();
+			h += task.height() as u16;
 		}
 		Ok(TreeViewPainter { screen, view, constr, color_map, height: h })
 	}
@@ -245,24 +245,37 @@ impl<'screen, 'view, 'constr> TreeViewPainter<'screen, 'view, 'constr> {
 					background: None,
 				})?,
 			}
-			h += task.height();
+			h += task.height() as u16;
 		}
 		Ok(())
 	}
 
 	fn print_task(&mut self, task: &Node, dy: u16, colors: Colors) -> io::Result<()> {
-		self.screen.stdout
-			.queue(SetColors(colors))?
-			.queue(MoveTo(self.constr.session.x, self.constr.session.y + dy))?
-			.queue(Print(Displayable(task.session)))?
-			.queue(MoveTo(self.constr.due_date.x, self.constr.due_date.y + dy))?
-			.queue(Print(Displayable(task.data.due_date)))?;
+		self.screen.stdout.queue(SetColors(colors))?;
 
-		for (i, split) in task.splits().enumerate() {
+		for (i, split) in task.name_splits().enumerate() {
 			self.screen.stdout
 				.queue(MoveTo(
 					self.constr.tasks.x + 2 * task.depth as u16 + 1,
 					self.constr.tasks.y + dy + i as u16
+				))?
+				.queue(Print(split))?;
+		}
+
+		for (i, split) in task.session_splits().enumerate() {
+			self.screen.stdout
+				.queue(MoveTo(
+					self.constr.session.x,
+					self.constr.session.y + dy + i as u16
+				))?
+				.queue(Print(split))?;
+		}
+
+		for (i, split) in task.due_date_splits().enumerate() {
+			self.screen.stdout
+				.queue(MoveTo(
+					self.constr.due_date.x,
+					self.constr.due_date.y + dy + i as u16
 				))?
 				.queue(Print(split))?;
 		}
@@ -278,7 +291,7 @@ impl<'screen, 'view, 'constr> TreeViewPainter<'screen, 'view, 'constr> {
 				x: self.constr.tasks.x,
 				y: self.constr.tasks.y + h as u16,
 				w: self.constr.tasks.w + self.constr.session.w + self.constr.due_date.w + 2,
-				h: task.height(),
+				h: task.height() as u16,
 			};
 
 			match (i == self.view.cursor, self.view.is_selected(task.pid, task.id)) {
@@ -288,7 +301,7 @@ impl<'screen, 'view, 'constr> TreeViewPainter<'screen, 'view, 'constr> {
 				(false, false) => {},
 			}
 
-			h += task.height();
+			h += task.height() as u16;
 		}
 		Ok(())
 	}
@@ -298,7 +311,7 @@ impl<'screen, 'view, 'constr> TreeViewPainter<'screen, 'view, 'constr> {
 		let mut h = self.height;
 		let mut prev_depth = 0;
 		for task in self.view.flattree.iter().rev() {
-			h -= task.height();
+			h -= task.height() as u16;
 
 			let is_next_child = prev_depth == task.depth + 1;
 			prev_depth = task.depth;
@@ -336,7 +349,7 @@ impl<'screen, 'view, 'constr> TreeViewPainter<'screen, 'view, 'constr> {
 	) -> io::Result<()> {
 		if task.depth == 0 {
 			if next_is_child {
-				for dy in dy..dy + task.height() {
+				for dy in dy..dy + task.height() as u16 {
 					self.screen.stdout.queue(MoveTo(self.constr.tasks.x, self.constr.tasks.y + dy))?;
 					self.screen.stdout.queue(Print("│"))?;
 				}
@@ -350,7 +363,7 @@ impl<'screen, 'view, 'constr> TreeViewPainter<'screen, 'view, 'constr> {
 		}
 
 		let color = *self.color_map.get(&task.id).unwrap();
-		for dy in dy..dy + task.height() {
+		for dy in dy..dy + task.height() as u16 {
 			self.screen.stdout.queue(MoveTo(self.constr.tasks.x, self.constr.tasks.y + dy))?;
 			let mut pos_iter = line_pos.iter();
 			let mut pos = pos_iter.next();

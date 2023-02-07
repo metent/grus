@@ -86,6 +86,14 @@ impl TreeViewConstraints {
 		self.tasks.w.into()
 	}
 
+	pub fn session_width(&self) -> usize {
+		self.session.w.into()
+	}
+
+	pub fn due_date_width(&self) -> usize {
+		self.due_date.w.into()
+	}
+
 	pub fn tree_height(&self) -> usize {
 		self.tasks.h.into()
 	}

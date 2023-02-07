@@ -12,7 +12,7 @@ pub struct FlatTreeBuilder {
 
 impl FlatTreeBuilder {
 	pub fn new(root: Node<'static>, height: usize) -> Self {
-		let filled = root.splits.len() - 1;
+		let filled = root.height();
 		let fnodes = vec![FNode { node: root, path: vec![0] }];
 		FlatTreeBuilder { height, fnodes, queue: VecDeque::new(), start: 0, filled }
 	}
@@ -27,7 +27,7 @@ impl FlatTreeBuilder {
 		};
 
 		let Some(child) = children.iter.next() else { return FlatTreeState::Build };
-		let extra = child.splits.len() - 1;
+		let extra = child.height();
 		if self.filled + extra > self.height { return FlatTreeState::Done }
 		self.filled += extra;
 

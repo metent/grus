@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::cmp::max;
 use std::fmt::{self, Display, Formatter};
 use std::str::FromStr;
 use chrono::{Datelike, NaiveDateTime, Local};
@@ -13,16 +14,31 @@ pub struct Node<'a> {
 	pub data: NodeData<'a>,
 	pub session: Option<Session>,
 	pub priority: Priority,
-	pub splits: Vec<usize>,
+	pub name_splits: Vec<usize>,
+	pub session_text: String,
+	pub session_splits: Vec<usize>,
+	pub due_date_text: String,
+	pub due_date_splits: Vec<usize>,
 }
 
 impl<'a> Node<'a> {
-	pub fn splits(&self) -> impl Iterator<Item = &str> {
-		self.splits.windows(2).map(|w| &self.data.name[w[0]..w[1]])
+	pub fn name_splits(&self) -> impl Iterator<Item = &str> {
+		self.name_splits.windows(2).map(|w| &self.data.name[w[0]..w[1]])
 	}
 
-	pub fn height(&self) -> u16 {
-		(self.splits.len() - 1) as u16
+	pub fn session_splits(&self) -> impl Iterator<Item = &str> {
+		self.session_splits.windows(2).map(|w| &self.session_text[w[0]..w[1]])
+	}
+
+	pub fn due_date_splits(&self) -> impl Iterator<Item = &str> {
+		self.due_date_splits.windows(2).map(|w| &self.due_date_text[w[0]..w[1]])
+	}
+
+	pub fn height(&self) -> usize {
+		max(
+			self.name_splits.len() - 1,
+			max(self.session_splits.len() - 1, self.due_date_splits.len() - 1)
+		)
 	}
 }
 

@@ -6,7 +6,7 @@ use crossterm::event::{self, KeyCode, Event};
 use interim::{parse_date_string, Dialect};
 use crate::app::{Action, CommandType, Error, Mode, View};
 use crate::flattree::{FlatTreeBuilder, FlatTreeState};
-use crate::node::{Node, NodeData, Priority, Session, wrap_text};
+use crate::node::{Displayable, Node, NodeData, Priority, Session, wrap_text};
 use crate::store::{Store, StoreReader};
 use crate::ui::{BufPrint, Screen, StatusViewConstraints, TreeViewConstraints};
 use crate::ui::tree::{SelRetention, TreeView};
@@ -283,7 +283,9 @@ impl TreeViewController {
 		let flattree = TreeViewReader {
 			reader: store.reader()?,
 			height: self.tvconstr.tree_height(),
-			width: self.tvconstr.tree_width(),
+			tasks_width: self.tvconstr.tree_width(),
+			session_width: self.tvconstr.session_width(),
+			due_date_width: self.tvconstr.due_date_width(),
 		}.build_flattree(self.tree_view.root_id)?;
 		self.tree_view.reset(flattree, ret);
 		Ok(())
@@ -293,15 +295,17 @@ impl TreeViewController {
 struct TreeViewReader<'store> {
 	reader: StoreReader<'store>,
 	height: usize,
-	width: usize,
+	tasks_width: usize,
+	session_width: usize,
+	due_date_width: usize,
 }
 
 impl<'store> TreeViewReader<'store> {
 	fn build_flattree(&self, id: u64) -> Result<Vec<Node<'static>>, Error> {
-		if self.width <= 1 { return Ok(Vec::new()) };
+		if self.tasks_width <= 1 { return Ok(Vec::new()) };
 
 		let root = self.get_node(id, id, 0)?;
-		if root.splits.len() - 1 > self.height { return Ok(Vec::new()) };
+		if root.name_splits.len() - 1 > self.height { return Ok(Vec::new()) };
 		let mut builder = FlatTreeBuilder::new(root, self.height);
 		let mut ids = HashSet::new();
 		loop {
@@ -325,7 +329,7 @@ impl<'store> TreeViewReader<'store> {
 		depth += 1;
 		let mut children = Vec::new();
 		for id in self.reader.child_ids(pid)? {
-			if 2 * depth + 1 >= self.width { continue };
+			if 2 * depth + 1 >= self.tasks_width { continue };
 			children.push(self.get_node(pid, id?, depth)?);
 		}
 		for i in 0..children.len() {
@@ -340,16 +344,25 @@ impl<'store> TreeViewReader<'store> {
 	fn get_node(&self, pid: u64, id: u64, depth: usize) -> Result<Node<'static>, Error> {
 		let data = self.reader.read(id)?.unwrap();
 		let data: NodeData = bincode::deserialize(data)?;
-		let width = self.width - 2 * depth - 1;
-		let splits = wrap_text(&data.name, width);
+		let width = self.tasks_width - 2 * depth - 1;
+		let name_splits = wrap_text(&data.name, width);
+		let session = self.reader.read_session(id)?.map(|s| *s);
+		let session_text = format!("{}", Displayable(session));
+		let session_splits = wrap_text(&session_text, self.session_width);
+		let due_date_text = format!("{}", Displayable(data.due_date));
+		let due_date_splits = wrap_text(&due_date_text, self.due_date_width);
 		Ok(Node {
 			id,
 			pid,
 			depth,
 			data,
-			session: self.reader.read_session(id)?.map(|s| *s),
+			session,
 			priority: Priority::default(),
-			splits
+			name_splits,
+			session_text,
+			session_splits,
+			due_date_text,
+			due_date_splits,
 		})
 	}
 }
