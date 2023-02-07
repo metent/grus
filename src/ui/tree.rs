@@ -193,28 +193,27 @@ pub enum SelRetention {
 
 impl BufPrint<TreeView, TreeViewConstraints> for Screen {
 	fn bufprint(&mut self, view: &TreeView, constr: &TreeViewConstraints) -> io::Result<&mut Self> {
+		let mut painter = TreeViewPainter::new(self, view, constr)?;
+		painter.paint_sel_task()?;
+		painter.print_tasks()?;
+		painter.paint_div_lines()?;
+		Ok(self)
+	}
+}
+
+struct TreeViewPainter<'screen, 'view, 'constr> {
+	screen: &'screen mut Screen,
+	view: &'view TreeView,
+	constr: &'constr TreeViewConstraints,
+	height: u16,
+	color_map: HashMap<u64, Color>,
+}
+
+impl<'screen, 'view, 'constr> TreeViewPainter<'screen, 'view, 'constr> {
+	fn new(screen: &'screen mut Screen, view: &'view TreeView, constr: &'constr TreeViewConstraints) -> io::Result<Self> {
 		let mut h = 0;
-		for (i, task) in view.flattree.iter().enumerate() {
-			let area = Rect {
-				x: constr.tasks.x,
-				y: constr.tasks.y + h as u16,
-				w: constr.tasks.w + constr.session.w + constr.due_date.w + 2,
-				h: task.height(),
-			};
-
-			match (i == view.cursor, view.is_selected(task.pid, task.id)) {
-				(true, true) => self.paint(area, Colors::new(Color::White, Color::Blue))?,
-				(true, false) => self.paint(area, Colors::new(Color::Black, Color::White))?,
-				(false, true) => self.paint(area, Colors::new(Color::White, Color::DarkBlue))?,
-				(false, false) => {},
-			}
-
-			h += task.height();
-		}
-
-		h = 0;
 		let mut color_map = HashMap::new();
-		for (i, task) in view.flattree.iter().enumerate() {
+		for task in view.flattree.iter() {
 			if let Some(color) = color_map.get_mut(&task.id) {
 				if let Color::White = color {
 					let mut hasher = DefaultHasher::new();
@@ -226,27 +225,80 @@ impl BufPrint<TreeView, TreeViewConstraints> for Screen {
 				color_map.insert(task.id, Color::White);
 			}
 
-			match (i == view.cursor, view.is_selected(task.pid, task.id)) {
+			h += task.height();
+		}
+		Ok(TreeViewPainter { screen, view, constr, color_map, height: h })
+	}
+
+	fn print_tasks(&mut self) -> io::Result<()> {
+		let mut h = 0;
+		for (i, task) in self.view.flattree.iter().enumerate() {
+			match (i == self.view.cursor, self.view.is_selected(task.pid, task.id)) {
 				(true, true) =>
-					self.print_task(task, h, Colors::new(Color::White, Color::Blue), constr)?,
+					self.print_task(task, h, Colors::new(Color::White, Color::Blue))?,
 				(true, false) =>
-					self.print_task(task, h, Colors::new(Color::Black, Color::White), constr)?,
+					self.print_task(task, h, Colors::new(Color::Black, Color::White))?,
 				(false, true) =>
-					self.print_task(task, h, Colors::new(Color::White, Color::DarkBlue), constr)?,
+					self.print_task(task, h, Colors::new(Color::White, Color::DarkBlue))?,
 				(false, false) => self.print_task(task, h, Colors {
 					foreground: Some(Color::White),
 					background: None,
-				}, constr)?,
+				})?,
 			}
 			h += task.height();
 		}
+		Ok(())
+	}
 
+	fn print_task(&mut self, task: &Node, dy: u16, colors: Colors) -> io::Result<()> {
+		self.screen.stdout
+			.queue(SetColors(colors))?
+			.queue(MoveTo(self.constr.session.x, self.constr.session.y + dy))?
+			.queue(Print(Displayable(task.session)))?
+			.queue(MoveTo(self.constr.due_date.x, self.constr.due_date.y + dy))?
+			.queue(Print(Displayable(task.data.due_date)))?;
+
+		for (i, split) in task.splits().enumerate() {
+			self.screen.stdout
+				.queue(MoveTo(
+					self.constr.tasks.x + 2 * task.depth as u16 + 1,
+					self.constr.tasks.y + dy + i as u16
+				))?
+				.queue(Print(split))?;
+		}
+
+		self.screen.stdout.queue(ResetColor)?;
+		Ok(())
+	}
+
+	fn paint_sel_task(&mut self) -> io::Result<()> {
+		let mut h = 0;
+		for (i, task) in self.view.flattree.iter().enumerate() {
+			let area = Rect {
+				x: self.constr.tasks.x,
+				y: self.constr.tasks.y + h as u16,
+				w: self.constr.tasks.w + self.constr.session.w + self.constr.due_date.w + 2,
+				h: task.height(),
+			};
+
+			match (i == self.view.cursor, self.view.is_selected(task.pid, task.id)) {
+				(true, true) => self.screen.paint(area, Colors::new(Color::White, Color::Blue))?,
+				(true, false) => self.screen.paint(area, Colors::new(Color::Black, Color::White))?,
+				(false, true) => self.screen.paint(area, Colors::new(Color::White, Color::DarkBlue))?,
+				(false, false) => {},
+			}
+
+			h += task.height();
+		}
+		Ok(())
+	}
+
+	fn paint_div_lines(&mut self) -> io::Result<()> {
 		let mut line_pos = Vec::new();
+		let mut h = self.height;
 		let mut prev_depth = 0;
-		for task in view.flattree.iter().rev() {
+		for task in self.view.flattree.iter().rev() {
 			h -= task.height();
-
-			let color = *color_map.get(&task.id).unwrap();
 
 			let is_next_child = prev_depth == task.depth + 1;
 			prev_depth = task.depth;
@@ -255,130 +307,78 @@ impl BufPrint<TreeView, TreeViewConstraints> for Screen {
 				Some(&last) if task.depth < last => {
 					line_pos.pop();
 					if line_pos.last() == Some(&task.depth) {
-						self.print_div_lines(task, h, &line_pos, false, is_next_child, color, constr)?;
+						self.paint_div_line(task, h, &line_pos, false, is_next_child)?;
 					} else {
 						line_pos.push(task.depth);
-						self.print_div_lines(task, h, &line_pos, true, is_next_child, color, constr)?;
+						self.paint_div_line(task, h, &line_pos, true, is_next_child)?;
 					}
 				}
 				Some(&last) if task.depth == last => {
-					self.print_div_lines(task, h, &line_pos, false, is_next_child, color, constr)?;
+					self.paint_div_line(task, h, &line_pos, false, is_next_child)?;
 				}
 				_ => {
 					line_pos.push(task.depth);
-					self.print_div_lines(task, h, &line_pos, true, is_next_child, color, constr)?;
+					self.paint_div_line(task, h, &line_pos, true, is_next_child)?;
 				}
 			}
 		}
 
-		return Ok(self);
-	}
-}
-
-trait PrintTask {
-	fn print_task(&mut self, task: &Node, dy: u16, colors: Colors, constr: &TreeViewConstraints) -> io::Result<()>;
-	fn print_div_lines(
-		&mut self,
-		task: &Node,
-		dy: u16,
-		line_pos: &[usize],
-		is_last: bool,
-		next_is_child: bool,
-		color: Color,
-		constr: &TreeViewConstraints,
-	) -> io::Result<()>;
-}
-
-impl PrintTask for Screen {
-	fn print_task(&mut self, task: &Node, dy: u16, colors: Colors, constr: &TreeViewConstraints) -> io::Result<()> {
-		self.stdout
-			.queue(SetColors(colors))?
-			.queue(MoveTo(constr.session.x, constr.session.y + dy))?
-			.queue(Print(Displayable(task.session)))?
-			.queue(MoveTo(constr.due_date.x, constr.due_date.y + dy))?
-			.queue(Print(Displayable(task.data.due_date)))?;
-
-		for (i, split) in task.splits().enumerate() {
-			self.stdout
-				.queue(MoveTo(
-					constr.tasks.x + 2 * task.depth as u16 + 1,
-					constr.tasks.y + dy + i as u16
-				))?
-				.queue(Print(split))?;
-		}
-
-		self.stdout.queue(ResetColor)?;
 		Ok(())
 	}
 
-	fn print_div_lines(
+	fn paint_div_line(
 		&mut self,
 		task: &Node,
 		dy: u16,
 		line_pos: &[usize],
 		is_last: bool,
 		next_is_child: bool,
-		color: Color,
-		constr: &TreeViewConstraints,
 	) -> io::Result<()> {
 		if task.depth == 0 {
 			if next_is_child {
 				for dy in dy..dy + task.height() {
-					self.stdout.queue(MoveTo(constr.tasks.x, constr.tasks.y + dy))?;
-					self.stdout.queue(Print("│"))?;
+					self.screen.stdout.queue(MoveTo(self.constr.tasks.x, self.constr.tasks.y + dy))?;
+					self.screen.stdout.queue(Print("│"))?;
 				}
 			}
-			self.stdout
-				.queue(MoveTo(constr.tasks.x, constr.tasks.y))?
+			self.screen.stdout
+				.queue(MoveTo(self.constr.tasks.x, self.constr.tasks.y))?
 				.queue(SetForegroundColor(color_from_prio(&task.priority)))?
 				.queue(Print("•"))?
 				.queue(ResetColor)?;
 			return Ok(());
 		}
 
+		let color = *self.color_map.get(&task.id).unwrap();
 		for dy in dy..dy + task.height() {
-			self.stdout.queue(MoveTo(constr.tasks.x, constr.tasks.y + dy))?;
+			self.screen.stdout.queue(MoveTo(self.constr.tasks.x, self.constr.tasks.y + dy))?;
 			let mut pos_iter = line_pos.iter();
 			let mut pos = pos_iter.next();
 			for d in 1..task.depth {
 				if Some(&d) == pos {
-					self.stdout.queue(Print("│ "))?;
+					self.screen.stdout.queue(Print("│ "))?;
 					pos = pos_iter.next();
 				} else {
-					self.stdout.queue(Print("  "))?;
+					self.screen.stdout.queue(Print("  "))?;
 				}
 			}
-			if is_last {
-				self.stdout.queue(Print("  "))?;
-			} else {
-				self.stdout.queue(Print("│ "))?;
-			}
-			if next_is_child {
-				self.stdout.queue(Print("│"))?;
-			} else {
-				self.stdout.queue(Print(" "))?;
-			}
+			self.screen.stdout
+				.queue(Print(if is_last { "  " } else { "│ " }))?
+				.queue(Print(if next_is_child { "│" } else { " " }))?;
 		}
 
 		let dx = 2 * task.depth as u16 - 2;
-		self.stdout
-			.queue(MoveTo(constr.tasks.x + dx, constr.tasks.y + dy))?;
+		self.screen.stdout
+			.queue(MoveTo(self.constr.tasks.x + dx, self.constr.tasks.y + dy))?;
 		if color != Color::White {
-			self.stdout.queue(SetForegroundColor(color))?;
-			if is_last {
-				self.stdout.queue(Print("┕━"))?;
-			} else {
-				self.stdout.queue(Print("┝━"))?;
-			}
-			self.stdout.queue(ResetColor)?;
+			self.screen.stdout
+				.queue(SetForegroundColor(color))?
+				.queue(Print(if is_last { "┕━" } else { "┝━" }))?
+				.queue(ResetColor)?;
 		} else {
-			if is_last {
-				self.stdout.queue(Print("└─"))?;
-			} else {
-				self.stdout.queue(Print("├─"))?;
-			}
+			self.screen.stdout.queue(Print(if is_last { "└─" } else { "├─" }))?;
 		}
-		self.stdout
+		self.screen.stdout
 			.queue(SetForegroundColor(color_from_prio(&task.priority)))?
 			.queue(Print("•"))?
 			.queue(ResetColor)?;
