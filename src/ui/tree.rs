@@ -22,29 +22,24 @@ impl TreeView {
 		TreeView { flattree, cursor: 0, selections: HashMap::new(), root_id: 0, stack: Vec::new() }
 	}
 
-	pub fn reset(&mut self, flattree: Vec<Node<'static>>, ret: SelRetention) {
-		match ret {
-			SelRetention::Stay => (),
-			SelRetention::Parent => if let Some(&Node { pid, .. }) = self.cursor_node() {
-				if let Some(cursor) = flattree.iter().position(|node| node.id == pid) {
-					self.cursor = cursor;
-				} else {
-					self.cursor = 0
-				}
-			}
-			SelRetention::SameId => if let Some(&Node { id, pid, .. }) = self.cursor_node() {
-				if let Some(cursor) = flattree.iter().position(|node| node.id == id && node.pid == pid) {
-					self.cursor = cursor;
-				} else if let Some(cursor) = flattree.iter().position(|node| node.id == id) {
-					self.cursor = cursor;
-				} else if let Some(cursor) = flattree.iter().position(|node| node.id == pid) {
-					self.cursor = cursor;
-				} else {
-					self.cursor = 0
-				}
-			}
-			SelRetention::Reset => self.cursor = 0,
+	pub fn reset(&mut self, flattree: Vec<Node<'static>>) {
+		let Some(&Node { id, pid, priority, .. }) = self.cursor_node() else {
+			self.cursor = 0;
+			self.flattree = flattree;
+			return
+		};
+		let mut same = None;
+		let mut next = None;
+		let mut prev = None;
+		let mut parent = None;
+		for (i, node) in flattree.iter().enumerate() {
+			if node.id == id && node.pid == pid { same = Some(i); break }
+			else if node.pid == pid && node.priority.det == priority.det { next = Some(i) }
+			else if node.pid == pid && node.priority.det + 1 == priority.det { prev = Some(i) }
+			else if parent.is_none() && node.id == pid { parent = Some(i) }
 		}
+		self.cursor = same.or(next).or(prev).or(parent).unwrap_or(0);
+
 		self.flattree = flattree;
 	}
 
@@ -182,13 +177,6 @@ impl<'s, T: Iterator<Item = &'s u64>> Iterator for SelectionIds<'s, T> {
 			SelectionIds::Empty(iter) => iter.next(),
 		}
 	}
-}
-
-pub enum SelRetention {
-	Stay,
-	Parent,
-	SameId,
-	Reset,
 }
 
 impl BufPrint<TreeView, TreeViewConstraints> for Screen {

@@ -79,7 +79,8 @@ impl FromStr for Session {
 	}
 }
 
-#[cfg_attr(test, derive(Clone, Debug, PartialEq))]
+#[derive(Copy, Clone)]
+#[cfg_attr(test, derive(Debug, PartialEq))]
 pub struct Priority {
 	pub det: u64,
 	pub total: u64,

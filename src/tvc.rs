@@ -9,7 +9,7 @@ use crate::flattree::{FlatTreeBuilder, FlatTreeState};
 use crate::node::{Displayable, Node, NodeData, Priority, Session, wrap_text};
 use crate::store::{Store, StoreReader};
 use crate::ui::{BufPrint, Screen, StatusViewConstraints, TreeViewConstraints};
-use crate::ui::tree::{SelRetention, TreeView};
+use crate::ui::tree::TreeView;
 use crate::ui::status::StatusView;
 
 pub struct TreeViewController {
@@ -30,7 +30,7 @@ impl TreeViewController {
 			svconstr: StatusViewConstraints::new()?,
 			mode: Mode::Normal,
 		};
-		tvc.update_tree_view(store, SelRetention::Stay)?;
+		tvc.update_tree_view(store)?;
 		Ok(tvc)
 	}
 
@@ -83,7 +83,7 @@ impl TreeViewController {
 	pub fn resize(&mut self, store: &Store, w: u16, h: u16) -> Result<(), Error> {
 		self.tvconstr.update(w, h);
 		self.svconstr.update(w, h);
-		self.update_tree_view(store, SelRetention::SameId)?;
+		self.update_tree_view(store)?;
 		Ok(())
 	}
 
@@ -119,7 +119,7 @@ impl TreeViewController {
 		writer.commit()?;
 
 		self.tree_view.clear_selections();
-		self.update_tree_view(store, SelRetention::SameId)?;
+		self.update_tree_view(store)?;
 
 		self.cancel();
 		Ok(())
@@ -134,7 +134,7 @@ impl TreeViewController {
 		writer.commit()?;
 
 		self.tree_view.deselect();
-		self.update_tree_view(store, SelRetention::Parent)?;
+		self.update_tree_view(store)?;
 		Ok(())
 	}
 
@@ -151,7 +151,7 @@ impl TreeViewController {
 		writer.commit()?;
 
 		self.tree_view.clear_selections();
-		self.update_tree_view(store, SelRetention::SameId)?;
+		self.update_tree_view(store)?;
 
 		self.cancel();
 		Ok(())
@@ -172,7 +172,7 @@ impl TreeViewController {
 		writer.commit()?;
 
 		self.tree_view.clear_selections();
-		self.update_tree_view(store, SelRetention::SameId)?;
+		self.update_tree_view(store)?;
 
 		self.cancel();
 		Ok(())
@@ -190,7 +190,7 @@ impl TreeViewController {
 		writer.commit()?;
 
 		self.tree_view.clear_selections();
-		self.update_tree_view(store, SelRetention::SameId)?;
+		self.update_tree_view(store)?;
 		Ok(())
 	}
 
@@ -203,7 +203,7 @@ impl TreeViewController {
 		writer.add_session(node.id, &session)?;
 		writer.commit()?;
 
-		self.update_tree_view(store, SelRetention::SameId)?;
+		self.update_tree_view(store)?;
 		self.cancel();
 		Ok(())
 	}
@@ -217,7 +217,7 @@ impl TreeViewController {
 		writer.move_up(node.pid, node.id)?;
 		writer.commit()?;
 
-		self.update_tree_view(store, SelRetention::SameId)?;
+		self.update_tree_view(store)?;
 		Ok(())
 	}
 
@@ -230,7 +230,7 @@ impl TreeViewController {
 		writer.move_down(node.pid, node.id)?;
 		writer.commit()?;
 
-		self.update_tree_view(store, SelRetention::SameId)?;
+		self.update_tree_view(store)?;
 		Ok(())
 	}
 
@@ -244,7 +244,7 @@ impl TreeViewController {
 		writer.commit()?;
 
 		self.tree_view.clear_selections();
-		self.update_tree_view(store, SelRetention::Stay)?;
+		self.update_tree_view(store)?;
 		Ok(())
 	}
 
@@ -258,19 +258,19 @@ impl TreeViewController {
 		writer.commit()?;
 
 		self.tree_view.clear_selections();
-		self.update_tree_view(store, SelRetention::Stay)?;
+		self.update_tree_view(store)?;
 		Ok(())
 	}
 
 	fn move_into(&mut self, store: &Store) -> Result<(), Error> {
 		self.tree_view.move_into();
-		self.update_tree_view(store, SelRetention::Reset)?;
+		self.update_tree_view(store)?;
 		Ok(())
 	}
 
 	fn move_out(&mut self, store: &Store) -> Result<(), Error> {
 		self.tree_view.move_out();
-		self.update_tree_view(store, SelRetention::Reset)?;
+		self.update_tree_view(store)?;
 		Ok(())
 	}
 
@@ -279,7 +279,7 @@ impl TreeViewController {
 		self.mode = Mode::Normal;
 	}
 
-	fn update_tree_view(&mut self, store: &Store, ret: SelRetention) -> Result<(), Error> {
+	fn update_tree_view(&mut self, store: &Store) -> Result<(), Error> {
 		let flattree = TreeViewReader {
 			reader: store.reader()?,
 			height: self.tvconstr.tree_height(),
@@ -287,7 +287,7 @@ impl TreeViewController {
 			session_width: self.tvconstr.session_width(),
 			due_date_width: self.tvconstr.due_date_width(),
 		}.build_flattree(self.tree_view.root_id)?;
-		self.tree_view.reset(flattree, ret);
+		self.tree_view.reset(flattree);
 		Ok(())
 	}
 }
