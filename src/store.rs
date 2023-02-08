@@ -311,9 +311,10 @@ impl<'env> StoreWriter<'env> {
 	pub fn cut(&mut self, src_pid: u64, src: u64, dest: u64) -> Result<bool, Error> {
 		if !self.share(src, dest)? { return Ok(false) };
 
-		btree::del(&mut self.txn, &mut self.links, &src_pid, Some(&src))?;
+		let is_head = btree::del(&mut self.txn, &mut self.links, &src_pid, Some(&src))?;
 
 		let rt = self.get_rt(src, src_pid)?.ok_or_else(invalid_data_error)?;
+		if is_head { btree::put(&mut self.txn, &mut self.links, &src_pid, &rt.next)?; }
 		if rt.prev > 0 { self.modify_rt(rt.prev, src_pid, |prt| prt.next = rt.next)? };
 		if rt.next > 0 { self.modify_rt(rt.next, src_pid, |nrt| nrt.prev = rt.prev)? };
 		btree::del(&mut self.txn, &mut self.rlinks, &src, Some(&rt))?;
