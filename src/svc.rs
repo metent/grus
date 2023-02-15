@@ -1,7 +1,7 @@
 use std::io;
 use crossterm::event::{self, KeyCode, Event};
 use crate::app::{Action, Error, Mode, View};
-use crate::node::{wrap_text, Displayable, NodeData};
+use crate::node::{wrap_text, Displayable};
 use crate::store::Store;
 use crate::ui::{BufPrint, Screen, SessionViewConstraints, StatusViewConstraints};
 use crate::ui::session::{Item, SessionView};
@@ -66,8 +66,7 @@ impl SessionViewController {
 		let reader = store.reader()?;
 		for entry in reader.all_sessions()? {
 			let (&session, &id) = entry?;
-			let Some(data) = reader.read(id)? else { continue };
-			let NodeData { name, .. } = bincode::deserialize(data)?;
+			let Some(name) = reader.name(id)? else { continue };
 			let name_splits = wrap_text(&name, self.ssvconstr.tasks_width());
 			let session_text = format!("{}", Displayable(Some(session)));
 			let session_splits = wrap_text(&session_text, self.ssvconstr.session_width());

@@ -1,7 +1,6 @@
 use std::io;
 use std::path::Path;
 use crossterm::terminal;
-use crate::node::NodeData;
 use crate::store::Store;
 use crate::svc::SessionViewController;
 use crate::tvc::TreeViewController;
@@ -18,8 +17,7 @@ pub struct Application {
 
 impl Application {
 	pub fn init<P: AsRef<Path>>(path: P, n_roots: usize) -> Result<Self, Error> {
-		let root_data = bincode::serialize(&NodeData::with_name("/"))?;
-		let store = Store::open(path, &root_data, n_roots)?;
+		let store = Store::open(path, n_roots)?;
 		let screen = Screen::new()?;
 		let tvc = TreeViewController::new(&store)?;
 		let svc = SessionViewController::new(&store)?;

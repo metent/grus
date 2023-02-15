@@ -1,34 +1,33 @@
 use std::io::{Error as IoError, ErrorKind};
 use std::path::Path;
+use std::str;
+use chrono::NaiveDateTime;
 use sanakirja::{Commit, Env, Error, LoadPage, MutTxn, RootDb, Storable, Txn};
 use sanakirja::btree::{self, Db, UDb};
-use crate::node::Session;
 
 type LinksDb = Db<u64, u64>;
 type RLinksDb = Db<u64, RTriple>;
-type NodesDb = UDb<u64, [u8]>;
+type NamesDb = UDb<u64, [u8]>;
+type DueDatesDb = Db<u64, DueDate>;
 type SessionsDb = Db<u64, Session>;
 type RSessionsDb = Db<Session, u64>;
 
 const ID_SQ: usize = 0;
 const DB_LINKS: usize = 1;
 const DB_RLINKS: usize = 2;
-const DB_NODES: usize = 3;
-const DB_SESSIONS: usize = 4;
-const DB_RSESSIONS: usize = 5;
+const DB_NAMES: usize = 3;
+const DB_DUE_DATES: usize = 4;
+const DB_SESSIONS: usize = 5;
+const DB_RSESSIONS: usize = 6;
 
 pub struct Store {
 	env: Env
 }
 
 impl Store {
-	pub fn open<P: AsRef<Path>>(
-		path: P,
-		root_data: &[u8],
-		n_roots: usize
-	) -> Result<Self, Error> {
+	pub fn open<P: AsRef<Path>>(path: P, n_roots: usize) -> Result<Self, Error> {
 		let store = Store { env: Env::new(path, 1 << 14, n_roots)? };
-		store.create_base(root_data)?;
+		store.create_base()?;
 		Ok(store)
 	}
 
@@ -37,10 +36,11 @@ impl Store {
 		let id = txn.root(ID_SQ);
 		let links = txn.root_db(DB_LINKS).ok_or_else(invalid_data_error)?;
 		let rlinks = txn.root_db(DB_RLINKS).ok_or_else(invalid_data_error)?;
-		let nodes = txn.root_db(DB_NODES).ok_or_else(invalid_data_error)?;
+		let names = txn.root_db(DB_NAMES).ok_or_else(invalid_data_error)?;
+		let due_dates = txn.root_db(DB_DUE_DATES).ok_or_else(invalid_data_error)?;
 		let sessions = txn.root_db(DB_SESSIONS).ok_or_else(invalid_data_error)?;
 		let rsessions = txn.root_db(DB_RSESSIONS).ok_or_else(invalid_data_error)?;
-		Ok(StoreReader { txn, id, links, rlinks, nodes, sessions, rsessions })
+		Ok(StoreReader { txn, id, links, rlinks, names, due_dates, sessions, rsessions })
 	}
 
 	pub fn writer(&self) -> Result<StoreWriter, Error> {
@@ -48,41 +48,40 @@ impl Store {
 		let id = txn.root(ID_SQ).ok_or_else(invalid_data_error)?;
 		let links = txn.root_db(DB_LINKS).ok_or_else(invalid_data_error)?;
 		let rlinks = txn.root_db(DB_RLINKS).ok_or_else(invalid_data_error)?;
-		let nodes = txn.root_db(DB_NODES).ok_or_else(invalid_data_error)?;
+		let names = txn.root_db(DB_NAMES).ok_or_else(invalid_data_error)?;
+		let due_dates = txn.root_db(DB_DUE_DATES).ok_or_else(invalid_data_error)?;
 		let sessions = txn.root_db(DB_SESSIONS).ok_or_else(invalid_data_error)?;
 		let rsessions = txn.root_db(DB_RSESSIONS).ok_or_else(invalid_data_error)?;
-		Ok(StoreWriter { txn, id, links, rlinks, nodes, sessions, rsessions })
+		Ok(StoreWriter { txn, id, links, rlinks, names, due_dates, sessions, rsessions })
 	}
 
-	fn create_base(&self, root_data: &[u8]) -> Result<(), Error> {
+	fn create_base(&self) -> Result<(), Error> {
 		let mut txn = Env::mut_txn_begin(&self.env)?;
 
 		let id = txn.root(ID_SQ);
 		let links: Option<LinksDb> = txn.root_db(DB_LINKS);
 		let rlinks: Option<RLinksDb> = txn.root_db(DB_RLINKS);
-		let nodes: Option<NodesDb> = txn.root_db(DB_NODES);
+		let names: Option<NamesDb> = txn.root_db(DB_NAMES);
+		let due_dates: Option<DueDatesDb> = txn.root_db(DB_DUE_DATES);
 		let sessions: Option<SessionsDb> = txn.root_db(DB_SESSIONS);
 		let rsessions: Option<RSessionsDb> = txn.root_db(DB_RSESSIONS);
-		match (id, links, rlinks, nodes, sessions, rsessions) {
-			(Some(_), Some(_), Some(_), Some(nodes), Some(_), Some(_)) => {
-				match btree::get(&txn, &nodes, &0, None)? {
-					Some((&0, _)) => Ok(()),
-					_ => Err(invalid_data_error()),
-				}
-			}
-			(None, None, None, None, None, None) => {
+		match (id, links, rlinks, names, due_dates, sessions, rsessions) {
+			(Some(_), Some(_), Some(_), Some(_), Some(_), Some(_), Some(_)) => Ok(()),
+			(None, None, None, None, None, None, None) => {
 				let links: LinksDb = btree::create_db(&mut txn)?;
 				let rlinks: RLinksDb = btree::create_db(&mut txn)?;
-				let mut nodes: NodesDb = btree::create_db_(&mut txn)?;
+				let mut names: NamesDb = btree::create_db_(&mut txn)?;
+				let due_dates: DueDatesDb = btree::create_db(&mut txn)?;
 				let sessions: SessionsDb = btree::create_db(&mut txn)?;
 				let rsessions: RSessionsDb = btree::create_db(&mut txn)?;
 
-				btree::put(&mut txn, &mut nodes, &0, root_data)?;
+				btree::put(&mut txn, &mut names, &0, b"/")?;
 
 				txn.set_root(ID_SQ, 1);
 				txn.set_root(DB_LINKS, links.db);
 				txn.set_root(DB_RLINKS, rlinks.db);
-				txn.set_root(DB_NODES, nodes.db);
+				txn.set_root(DB_NAMES, names.db);
+				txn.set_root(DB_DUE_DATES, due_dates.db);
 				txn.set_root(DB_SESSIONS, sessions.db);
 				txn.set_root(DB_RSESSIONS, rsessions.db);
 				txn.commit()
@@ -101,22 +100,30 @@ pub struct StoreRw<T: LoadPage> {
 	id: u64,
 	links: LinksDb,
 	rlinks: RLinksDb,
-	nodes: NodesDb,
+	names: NamesDb,
+	due_dates: DueDatesDb,
 	sessions: SessionsDb,
 	rsessions: RSessionsDb,
 }
 
 impl<T: LoadPage<Error = Error>> StoreRw<T> {
-	pub fn read(&self, id: u64) -> Result<Option<&[u8]>, Error> {
-		match btree::get(&self.txn, &self.nodes, &id, None)? {
-			Some((&eid, data)) if eid == id => Ok(Some(data)),
-			_ => Ok(None)
+	pub fn name(&self, id: u64) -> Result<Option<&str>, Error> {
+		match btree::get(&self.txn, &self.names, &id, None)? {
+			Some((&eid, name)) if eid == id => Ok(Some(str::from_utf8(name).map_err(|_| invalid_data_error())?)),
+			_ => Ok(None),
 		}
 	}
 
-	pub fn read_session(&self, id: u64) -> Result<Option<&Session>, Error> {
+	pub fn due_date(&self, id: u64) -> Result<Option<NaiveDateTime>, Error> {
+		match btree::get(&self.txn, &self.due_dates, &id, None)? {
+			Some((&eid, due_date)) if eid == id => Ok(Some(due_date.0)),
+			_ => Ok(None),
+		}
+	}
+
+	pub fn first_session(&self, id: u64) -> Result<Option<Session>, Error> {
 		match btree::get(&self.txn, &self.sessions, &id, None)? {
-			Some((&eid, session)) if eid == id => Ok(Some(session)),
+			Some((&eid, &session)) if eid == id => Ok(Some(session)),
 			_ => Ok(None)
 		}
 	}
@@ -190,7 +197,7 @@ impl ChildIds {
 type StoreWriter<'env> = StoreRw<MutTxn<&'env Env, ()>>;
 
 impl<'env> StoreWriter<'env> {
-	pub fn add_child(&mut self, pid: u64, data: &[u8]) -> Result<u64, Error> {
+	pub fn add_child(&mut self, pid: u64, name: &str) -> Result<u64, Error> {
 		let next = self.get_child(pid)?.unwrap_or(0);
 
 		let id = self.id;
@@ -200,7 +207,7 @@ impl<'env> StoreWriter<'env> {
 		btree::put(&mut self.txn, &mut self.rlinks, &id, &RTriple { pid, next, prev: 0 })?;
 		if next > 0 { self.modify_rt(next, pid, |rt| rt.prev = id)? };
 
-		btree::put(&mut self.txn, &mut self.nodes, &id, data)?;
+		btree::put(&mut self.txn, &mut self.names, &id, name.as_bytes())?;
 		self.id += 1;
 		Ok(id)
 	}
@@ -228,9 +235,20 @@ impl<'env> StoreWriter<'env> {
 		Ok(())
 	}
 
-	pub fn modify(&mut self, id: u64, data: &[u8]) -> Result<(), Error> {
-		btree::del(&mut self.txn, &mut self.nodes, &id, None)?;
-		btree::put(&mut self.txn, &mut self.nodes, &id, data)?;
+	pub fn rename(&mut self, id: u64, name: &str) -> Result<(), Error> {
+		btree::del(&mut self.txn, &mut self.names, &id, None)?;
+		btree::put(&mut self.txn, &mut self.names, &id, name.as_bytes())?;
+		Ok(())
+	}
+
+	pub fn set_due_date(&mut self, id: u64, date: NaiveDateTime) -> Result<(), Error> {
+		btree::del(&mut self.txn, &mut self.due_dates, &id, None)?;
+		btree::put(&mut self.txn, &mut self.due_dates, &id, &DueDate(date))?;
+		Ok(())
+	}
+
+	pub fn unset_due_date(&mut self, id: u64) -> Result<(), Error> {
+		btree::del(&mut self.txn, &mut self.due_dates, &id, None)?;
 		Ok(())
 	}
 
@@ -326,7 +344,8 @@ impl<'env> StoreWriter<'env> {
 		self.txn.set_root(ID_SQ, self.id);
 		self.txn.set_root(DB_LINKS, self.links.db);
 		self.txn.set_root(DB_RLINKS, self.rlinks.db);
-		self.txn.set_root(DB_NODES, self.nodes.db);
+		self.txn.set_root(DB_NAMES, self.names.db);
+		self.txn.set_root(DB_DUE_DATES, self.due_dates.db);
 		self.txn.set_root(DB_SESSIONS, self.sessions.db);
 		self.txn.set_root(DB_RSESSIONS, self.rsessions.db);
 		self.txn.commit()
@@ -348,7 +367,8 @@ impl<'env> StoreWriter<'env> {
 			if eid == id { return Ok(()) };
 		}
 
-		btree::del(&mut self.txn, &mut self.nodes, &id, None)?;
+		btree::del(&mut self.txn, &mut self.names, &id, None)?;
+		btree::del(&mut self.txn, &mut self.due_dates, &id, None)?;
 		self.delete_id_sessions(id)?;
 
 		let mut child_ids = ChildIds::new(self, id)?;
@@ -397,7 +417,28 @@ impl Storable for RTriple {
 	}
 }
 
+#[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Clone, Copy)]
+#[cfg_attr(test, derive(Default))]
+pub struct Session {
+	pub start: NaiveDateTime,
+	pub end: NaiveDateTime,
+}
+
 impl Storable for Session {
+	type PageReferences = core::iter::Empty<u64>;
+	fn page_references(&self) -> Self::PageReferences {
+		core::iter::empty()
+	}
+
+	fn compare<T>(&self, _: &T, b: &Self) -> core::cmp::Ordering {
+		self.cmp(b)
+	}
+}
+
+#[derive(Debug, Default, Ord, PartialOrd, Eq, PartialEq)]
+struct DueDate(NaiveDateTime);
+
+impl Storable for DueDate {
 	type PageReferences = core::iter::Empty<u64>;
 	fn page_references(&self) -> Self::PageReferences {
 		core::iter::empty()
@@ -419,33 +460,32 @@ fn invalid_data_error() -> Error {
 mod tests {
 	use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 	use sanakirja::{Env, Error};
-	use crate::node::Session;
-	use super::Store;
+	use super::{Session, Store};
 
 	#[test]
 	fn add_child() -> Result<(), Error> {
 		let store = Store { env: Env::new_anon(1 << 14, 2)? };
-		store.create_base(&[0])?;
+		store.create_base()?;
 
 		let mut writer = store.writer()?;
-		writer.add_child(0, &[10, 20])?;
-		writer.add_child(1, &[30, 20])?;
+		writer.add_child(0, "first")?;
+		writer.add_child(1, "second")?;
 		writer.commit()?;
 
 		let reader = store.reader()?;
 		let mut iter = reader.child_ids(0)?;
 
 		let id = iter.next().unwrap()?;
-		let data = reader.read(id)?.unwrap();
+		let data = reader.name(id)?.unwrap();
 		assert_eq!(id, 1);
-		assert_eq!(data, &[10, 20]);
+		assert_eq!(data, "first");
 		assert!(iter.next().is_none());
 
 		let mut iter = reader.child_ids(1)?;
 		let id = iter.next().unwrap()?;
-		let data = reader.read(id)?.unwrap();
+		let data = reader.name(id)?.unwrap();
 		assert_eq!(id, 2);
-		assert_eq!(data, &[30, 20]);
+		assert_eq!(data, "second");
 		assert!(iter.next().is_none());
 
 		Ok(())
@@ -454,7 +494,7 @@ mod tests {
 	#[test]
 	fn add_session() -> Result<(), Error> {
 		let store = Store { env: Env::new_anon(1 << 14, 2)? };
-		store.create_base(&[0])?;
+		store.create_base()?;
 
 		let mut writer = store.writer()?;
 		let start = NaiveDateTime::new(
@@ -470,7 +510,7 @@ mod tests {
 		writer.commit()?;
 
 		let reader = store.reader()?;
-		assert_eq!(reader.read_session(0)?.unwrap(), &session);
+		assert_eq!(reader.first_session(0)?.unwrap(), session);
 
 		Ok(())
 	}

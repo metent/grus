@@ -6,8 +6,8 @@ use crossterm::event::{self, KeyCode, Event};
 use interim::{parse_date_string, Dialect};
 use crate::app::{Action, CommandType, Error, Mode, View};
 use crate::flattree::{FlatTreeBuilder, FlatTreeState};
-use crate::node::{Displayable, Node, NodeData, Priority, Session, wrap_text};
-use crate::store::{Store, StoreReader};
+use crate::node::{Displayable, Node, Priority, wrap_text};
+use crate::store::{Session, Store, StoreReader};
 use crate::ui::{BufPrint, Screen, StatusViewConstraints, TreeViewConstraints};
 use crate::ui::tree::TreeView;
 use crate::ui::status::StatusView;
@@ -94,7 +94,7 @@ impl TreeViewController {
 		let title = match cmd {
 			CommandType::AddChild => "add: ",
 			CommandType::Rename => {
-				self.status_view.set_input(&node.data.name);
+				self.status_view.set_input(&node.name);
 				"rename: "
 			}
 			CommandType::SetDueDate => "due date: ",
@@ -107,11 +107,8 @@ impl TreeViewController {
 		let mut selections = self.tree_view.selection_ids();
 		let Some(&first) = selections.next() else { return Ok(()) };
 
-		let name = self.status_view.input();
-		let data = bincode::serialize(&NodeData::with_name(name))?;
-
 		let mut writer = store.writer()?;
-		let id = writer.add_child(first, &data)?;
+		let id = writer.add_child(first, self.status_view.input())?;
 
 		for &pid in selections {
 			writer.share(id, pid)?;
@@ -140,13 +137,9 @@ impl TreeViewController {
 
 	fn rename(&mut self, store: &Store) -> Result<(), Error> {
 		let mut writer = store.writer()?;
+		let name = self.status_view.input();
 		for &id in self.tree_view.selection_ids() {
-			let original = bincode::deserialize(writer.read(id)?.unwrap())?;
-
-			let name = self.status_view.input();
-			let data = bincode::serialize(&NodeData { name: name.into(), ..original })?;
-
-			writer.modify(id, &data)?;
+			writer.rename(id, name)?;
 		}
 		writer.commit()?;
 
@@ -159,15 +152,11 @@ impl TreeViewController {
 
 	fn set_due_date(&mut self, store: &Store) -> Result<(), Error> {
 		let mut writer = store.writer()?;
+		let Ok(due_date) = parse_date_string(self.status_view.input(), Local::now(), Dialect::Uk) else {
+			return Ok(());
+		};
 		for &id in self.tree_view.selection_ids() {
-			let original = bincode::deserialize(writer.read(id)?.unwrap())?;
-
-			let Ok(due_date) = parse_date_string(self.status_view.input(), Local::now(), Dialect::Uk) else {
-				return Ok(());
-			};
-			let data = bincode::serialize(&NodeData { due_date: Some(due_date.naive_local()), ..original })?;
-
-			writer.modify(id, &data)?;
+			writer.set_due_date(id, due_date.naive_local())?;
 		}
 		writer.commit()?;
 
@@ -181,11 +170,7 @@ impl TreeViewController {
 	fn unset_due_date(&mut self, store: &Store) -> Result<(), Error> {
 		let mut writer = store.writer()?;
 		for &id in self.tree_view.selection_ids() {
-			let original = bincode::deserialize(writer.read(id)?.unwrap())?;
-
-			let data = bincode::serialize(&NodeData { due_date: None, ..original })?;
-
-			writer.modify(id, &data)?;
+			writer.unset_due_date(id)?;
 		}
 		writer.commit()?;
 
@@ -342,20 +327,21 @@ impl<'store> TreeViewReader<'store> {
 	}
 
 	fn get_node(&self, pid: u64, id: u64, depth: usize) -> Result<Node<'static>, Error> {
-		let data = self.reader.read(id)?.unwrap();
-		let data: NodeData = bincode::deserialize(data)?;
+		let name = self.reader.name(id)?.unwrap().to_string();
+		let due_date = self.reader.due_date(id)?;
 		let width = self.tasks_width - 2 * depth - 1;
-		let name_splits = wrap_text(&data.name, width);
-		let session = self.reader.read_session(id)?.map(|s| *s);
+		let name_splits = wrap_text(&name, width);
+		let session = self.reader.first_session(id)?;
 		let session_text = format!("{}", Displayable(session));
 		let session_splits = wrap_text(&session_text, self.session_width);
-		let due_date_text = format!("{}", Displayable(data.due_date));
+		let due_date_text = format!("{}", Displayable(due_date));
 		let due_date_splits = wrap_text(&due_date_text, self.due_date_width);
 		Ok(Node {
 			id,
 			pid,
 			depth,
-			data,
+			name: name.into(),
+			due_date,
 			session,
 			priority: Priority::default(),
 			name_splits,

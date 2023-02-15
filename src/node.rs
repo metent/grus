@@ -4,14 +4,15 @@ use std::fmt::{self, Display, Formatter};
 use std::str::FromStr;
 use chrono::{Datelike, NaiveDateTime, Local};
 use interim::{parse_date_string, DateError, Dialect};
-use serde::{Serialize, Deserialize};
+use crate::store::Session;
 
 #[cfg_attr(test, derive(Clone, Debug, PartialEq))]
 pub struct Node<'a> {
 	pub id: u64,
 	pub pid: u64,
 	pub depth: usize,
-	pub data: NodeData<'a>,
+	pub name: Cow<'a, str>,
+	pub due_date: Option<NaiveDateTime>,
 	pub session: Option<Session>,
 	pub priority: Priority,
 	pub name_splits: Vec<usize>,
@@ -23,7 +24,7 @@ pub struct Node<'a> {
 
 impl<'a> Node<'a> {
 	pub fn name_splits(&self) -> impl Iterator<Item = &str> {
-		self.name_splits.windows(2).map(|w| &self.data.name[w[0]..w[1]])
+		self.name_splits.windows(2).map(|w| &self.name[w[0]..w[1]])
 	}
 
 	pub fn session_splits(&self) -> impl Iterator<Item = &str> {
@@ -40,29 +41,6 @@ impl<'a> Node<'a> {
 			max(self.session_splits.len() - 1, self.due_date_splits.len() - 1)
 		)
 	}
-}
-
-#[derive(Serialize, Deserialize)]
-#[cfg_attr(test, derive(Clone, Debug, PartialEq, Default))]
-pub struct NodeData<'a> {
-	pub name: Cow<'a, str>,
-	pub due_date: Option<NaiveDateTime>,
-}
-
-impl<'a> NodeData<'a> {
-	pub fn with_name(name: &'a str) -> Self {
-		NodeData {
-			name: name.into(),
-			due_date: None,
-		}
-	}
-}
-
-#[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Clone, Copy)]
-#[cfg_attr(test, derive(Default))]
-pub struct Session {
-	pub start: NaiveDateTime,
-	pub end: NaiveDateTime,
 }
 
 impl FromStr for Session {

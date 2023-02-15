@@ -89,7 +89,8 @@ pub enum FlatTreeState {
 
 #[cfg(test)]
 mod tests {
-	use crate::node::{Node, NodeData, Priority, Session};
+	use crate::node::{Node, Priority};
+	use crate::store::Session;
 	use super::{FlatTreeBuilder, FlatTreeState};
 
 	#[test]
@@ -148,10 +149,8 @@ mod tests {
 			id,
 			pid,
 			depth: 0,
-			data: NodeData {
-				name: name.into(),
-				..NodeData::default()
-			},
+			name: name.into(),
+			due_date: None,
 			session: Some(Session::default()),
 			priority: pri,
 			name_splits: vec![0, 1],
