@@ -4,8 +4,8 @@ use std::ops::Range;
 use crossterm::QueueableCommand;
 use crossterm::cursor::MoveTo;
 use crossterm::style::{Color, Colors, Print, ResetColor, SetColors};
+use grus_lib::types::Session;
 use crate::node::wrap_text;
-use crate::store::Session;
 use super::{BufPrint, Rect, Screen, SessionViewConstraints};
 
 pub struct SessionView {

@@ -89,8 +89,8 @@ pub enum FlatTreeState {
 
 #[cfg(test)]
 mod tests {
+	use grus_lib::types::Session;
 	use crate::node::{Node, Priority};
-	use crate::store::Session;
 	use super::{FlatTreeBuilder, FlatTreeState};
 
 	#[test]

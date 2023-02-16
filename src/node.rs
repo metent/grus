@@ -1,10 +1,8 @@
 use std::borrow::Cow;
 use std::cmp::max;
 use std::fmt::{self, Display, Formatter};
-use std::str::FromStr;
 use chrono::{Datelike, NaiveDateTime, Local};
-use interim::{parse_date_string, DateError, Dialect};
-use crate::store::Session;
+use grus_lib::types::Session;
 
 #[cfg_attr(test, derive(Clone, Debug, PartialEq))]
 pub struct Node<'a> {
@@ -43,19 +41,6 @@ impl<'a> Node<'a> {
 	}
 }
 
-impl FromStr for Session {
-	type Err = DateError;
-
-	fn from_str(s: &str) -> Result<Self, Self::Err> {
-		match s.split_once(" to ") {
-			Some((s, e)) => Ok(Session {
-				start: parse_date_string(s, Local::now(), Dialect::Uk)?.naive_local(),
-				end: parse_date_string(e, Local::now(), Dialect::Uk)?.naive_local(),
-			}),
-			None => Err(DateError::MissingDate),
-		}
-	}
-}
 
 #[derive(Copy, Clone)]
 #[cfg_attr(test, derive(Debug, PartialEq))]

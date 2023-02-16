@@ -1,8 +1,8 @@
 use std::io;
 use crossterm::event::{self, KeyCode, Event};
+use grus_lib::Store;
 use crate::app::{Action, Error, Mode, View};
 use crate::node::{wrap_text, Displayable};
-use crate::store::Store;
 use crate::ui::{BufPrint, Screen, SessionViewConstraints, StatusViewConstraints};
 use crate::ui::session::{Item, SessionView};
 use crate::ui::status::StatusView;

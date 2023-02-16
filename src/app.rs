@@ -1,7 +1,7 @@
 use std::io;
 use std::path::Path;
 use crossterm::terminal;
-use crate::store::Store;
+use grus_lib::Store;
 use crate::svc::SessionViewController;
 use crate::tvc::TreeViewController;
 use crate::ui::Screen;

@@ -57,7 +57,6 @@ dependencies = [
  "js-sys",
  "num-integer",
  "num-traits",
- "serde",
  "time",
  "wasm-bindgen",
  "winapi",
@@ -202,9 +201,21 @@ dependencies = [
  "chrono",
  "crossterm",
  "dirs",
+ "grus-lib",
  "interim",
  "sanakirja",
  "thiserror",
+]
+
+[[package]]
+name = "grus-lib"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e0a3f4f11f87eacb3deb61ddd0b58bcf4357d7abe43a5d767b9e9506c48bed05"
+dependencies = [
+ "chrono",
+ "interim",
+ "sanakirja",
 ]
 
 [[package]]
@@ -486,12 +497,6 @@ name = "scratch"
 version = "1.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ddccb15bcce173023b3fedd9436f882a0739b8dfb45e4f6b6002bee5929f61b2"
-
-[[package]]
-name = "serde"
-version = "1.0.152"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bb7d1f0d3021d347a83e556fc4683dea2ea09d87bccdf88ff5c12545d89d5efb"
 
 [[package]]
 name = "signal-hook"
