@@ -103,6 +103,7 @@ impl TreeViewConstraints {
 pub struct SessionViewConstraints {
 	session: Rect,
 	tasks: Rect,
+	pub mode: SessionViewMode,
 }
 
 impl SessionViewConstraints {
@@ -114,14 +115,22 @@ impl SessionViewConstraints {
 	}
 
 	pub fn update(&mut self, w: u16, h: u16) {
-		if h < 2 || w < 2 { return };
-		self.session = Rect { x: 1, y: 1, w: (w - 2) / 2, h: h - 2 };
-		self.tasks = Rect {
-			x: self.session.x + self.session.w + 1,
-			y: 1,
-			w: w - 2 - self.session.w,
-			h: h - 2,
-		};
+		match self.mode {
+			SessionViewMode::Normal if h >= 2 && w >= 2 => {
+				self.session = Rect { x: 1, y: 1, w: (w - 2) / 2, h: h - 2 };
+				self.tasks = Rect {
+					x: self.session.x + self.session.w + 1,
+					y: 1,
+					w: w - 2 - self.session.w,
+					h: h - 2,
+				};
+			}
+			SessionViewMode::Task(_) if h >= 2 && w >= 1 => {
+				self.session = Rect { x: 1, y: 1, w: w - 1, h: h - 2 };
+				self.tasks = Rect::default();
+			}
+			_ => {}
+		}
 	}
 
 	pub fn session_height(&self) -> u16 {
@@ -135,6 +144,13 @@ impl SessionViewConstraints {
 	pub fn session_width(&self) -> usize {
 		self.session.w.into()
 	}
+}
+
+#[derive(Default, PartialEq)]
+pub enum SessionViewMode {
+	#[default]
+	Normal,
+	Task(u64),
 }
 
 #[derive(Default)]
