@@ -13,6 +13,7 @@
 - Tasks can now be made children of other tasks without breaking any existing links using the share action.
 - Multiple sessions can now be added to tasks using add session action.
 - New view: session view. Lists all sessions and the tasks to which they belong, in incresing order of session start time.
+- Task sub-mode in session view. Lists sessions of a single task. This sub-mode can be accessed in either tree or session view.
 
 #### Fixed
 

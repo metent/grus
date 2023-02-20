@@ -4,8 +4,7 @@ use crossterm::terminal;
 use grus_lib::Store;
 use crate::svc::SessionViewController;
 use crate::tvc::TreeViewController;
-use crate::ui::Screen;
-use crate::ui::BufPrint;
+use crate::ui::{BufPrint, Screen, SessionViewMode};
 
 pub struct Application {
 	pub store: Store,
@@ -48,6 +47,10 @@ impl Application {
 					}
 				}
 				Action::Quit => break,
+				Action::TaskSessions(id) => {
+					self.view = View::Session;
+					self.svc.change_mode(&self.store, SessionViewMode::Task(id))?;
+				}
 				Action::None => {}
 			}
 			self.draw()?;
@@ -68,6 +71,7 @@ impl Application {
 pub enum Action {
 	Quit,
 	Switch(View),
+	TaskSessions(u64),
 	None,
 }
 

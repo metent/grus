@@ -39,11 +39,11 @@ impl SessionViewController {
 					KeyCode::Char('j') | KeyCode::Down => self.session_view.cursor_down(),
 					KeyCode::Char('k') | KeyCode::Up => self.session_view.cursor_up(),
 					KeyCode::Char('d') => self.delete(store)?,
-					KeyCode::Char('a') if self.ssvconstr.mode == SessionViewMode::Normal
+					KeyCode::Char('v') if self.ssvconstr.mode == SessionViewMode::Normal
 					=> if let Some((id, _)) = self.session_view.session_and_id() {
 						self.change_mode(store, SessionViewMode::Task(id))?;
 					}
-					KeyCode::Char('a') if self.ssvconstr.mode != SessionViewMode::Normal
+					KeyCode::Char('v') if self.ssvconstr.mode != SessionViewMode::Normal
 						=> self.change_mode(store, SessionViewMode::Normal)?,
 					KeyCode::Char('1') => return Ok(Action::Switch(View::Tree)),
 					_ => {},
@@ -89,6 +89,15 @@ impl SessionViewController {
 		Ok(())
 	}
 
+	pub fn change_mode(&mut self, store: &Store, mode: SessionViewMode) -> Result<(), Error> {
+		self.ssvconstr.mode = mode;
+		let (w, h) = terminal::size()?;
+		self.ssvconstr.update(w, h);
+		self.svconstr.update(w, h);
+		self.session_view = SessionView::new(Vec::new(), self.ssvconstr.session_height());
+		self.update_session_view(store)
+	}
+
 	fn delete(&mut self, store: &Store) -> Result<(), Error> {
 		let Some((id, session)) = self.session_view.session_and_id() else { return Ok(()) };
 
@@ -98,14 +107,6 @@ impl SessionViewController {
 
 		self.update_session_view(store)?;
 		Ok(())
-	}
-
-	fn change_mode(&mut self, store: &Store, mode: SessionViewMode) -> Result<(), Error> {
-		self.ssvconstr.mode = mode;
-		let (w, h) = terminal::size()?;
-		self.ssvconstr.update(w, h);
-		self.session_view = SessionView::new(Vec::new(), self.ssvconstr.session_height());
-		self.update_session_view(store)
 	}
 
 	fn cancel(&mut self) {
