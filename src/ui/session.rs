@@ -12,14 +12,44 @@ pub struct SessionView {
 	items: Vec<Item>,
 	cursor: usize,
 	start: usize,
+	height: u16,
 	heights: Vec<u16>,
 }
 
 impl SessionView {
 	pub fn new(items: Vec<Item>, len: u16) -> Self {
-		let mut sv = SessionView { items, cursor: 0, start: 0, heights: Vec::new() };
-		sv.anchor_top(sv.cursor, len);
+		let mut sv = SessionView { items, cursor: 0, start: 0, height: len, heights: Vec::new() };
+		sv.anchor_top(sv.cursor);
 		sv
+	}
+
+	pub fn reset(&mut self, items: Vec<Item>) {
+		if self.items.len() == 0 {
+			self.items = items;
+			self.anchor_top(self.start);
+			return;
+		}
+		let pos = match items.binary_search(&self.items[self.cursor]) {
+			Ok(pos) => pos,
+			Err(pos) => pos,
+		};
+		if pos < items.len() {
+			self.cursor = pos;
+		} else {
+			self.cursor = items.len().saturating_sub(1);
+		}
+
+		let start = match items.binary_search(&self.items[self.start]) {
+			Ok(start) => start,
+			Err(start) => start,
+		};
+		if start < items.len() {
+			self.start = start;
+		} else {
+			self.start = items.len().saturating_sub(1);
+		}
+		self.items = items;
+		self.anchor_top(self.start);
 	}
 
 	pub fn resize(&mut self, len: u16, tasks_width: usize, session_width: usize) {
@@ -27,13 +57,14 @@ impl SessionView {
 			item.name_splits = wrap_text(&item.name, tasks_width);
 			item.session_splits = wrap_text(&item.session_text, session_width);
 		}
-		self.anchor_top(self.start, len);
+		self.height = len;
+		self.anchor_top(self.start);
 	}
 
 	pub fn cursor_up(&mut self) {
 		if self.cursor <= self.start {
 			if self.cursor > 0 { self.cursor -= 1 };
-			self.anchor_top(self.cursor, self.height());
+			self.anchor_top(self.cursor);
 		} else if self.cursor > self.start + self.heights.len() {
 			if self.cursor > 0 { self.cursor -= 1 };
 			self.anchor_bottom(self.cursor);
@@ -46,7 +77,7 @@ impl SessionView {
 		if self.items.is_empty() { return }
 		if self.cursor + 1 < self.start {
 			if self.cursor + 1 < self.items.len() { self.cursor += 1 };
-			self.anchor_top(self.cursor, self.height());
+			self.anchor_top(self.cursor);
 		} else if self.cursor + 1 >= self.start + self.heights.len() {
 			if self.cursor + 1 < self.items.len() { self.cursor += 1 };
 			self.anchor_bottom(self.cursor);
@@ -59,11 +90,11 @@ impl SessionView {
 		self.items.get(self.cursor).map(|Item { id, session, .. }| (*id, session))
 	}
 
-	fn anchor_top(&mut self, index: usize, len: u16) {
+	fn anchor_top(&mut self, index: usize) {
 		self.heights.clear();
 		let mut h = 0;
 		for item in &self.items[index..] {
-			if h + item.height() > len { break }
+			if h + item.height() > self.height { break }
 			self.heights.push(h);
 			h += item.height();
 		}
@@ -71,7 +102,7 @@ impl SessionView {
 	}
 
 	fn anchor_bottom(&mut self, index: usize) {
-		let mut h = self.height();
+		let mut h = self.height;
 		self.heights.clear();
 		for item in self.items[..=index].iter().rev() {
 			if h < item.height() { break }
@@ -82,17 +113,12 @@ impl SessionView {
 		self.start = index + 1 - self.heights.len();
 	}
 
-	fn height(&self) -> u16 {
-		self.heights.last().map(|l|
-			l + self.items.last().unwrap().height()
-		).unwrap_or(0)
-	}
-
 	fn window(&self) -> Range<usize> {
 		self.start..self.start + self.heights.len()
 	}
 }
 
+#[derive(Ord, PartialOrd, Eq, PartialEq)]
 pub struct Item {
 	pub session: Session,
 	pub id: u64,

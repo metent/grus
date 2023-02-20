@@ -72,7 +72,7 @@ impl SessionViewController {
 			let session_splits = wrap_text(&session_text, self.ssvconstr.session_width());
 			items.push(Item { session, id, name: name.into(), name_splits, session_text, session_splits });
 		}
-		self.session_view = SessionView::new(items, self.ssvconstr.session_height());
+		self.session_view.reset(items);
 		Ok(())
 	}
 
