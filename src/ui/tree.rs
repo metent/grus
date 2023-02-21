@@ -15,11 +15,19 @@ pub struct TreeView {
 	selections: HashMap<u64, HashSet<u64>>,
 	pub root_id: u64,
 	pub stack: Vec<u64>,
+	pub constr: TreeViewConstraints,
 }
 
 impl TreeView {
-	pub fn new(flattree: Vec<Node<'static>>) -> Self {
-		TreeView { flattree, cursor: 0, selections: HashMap::new(), root_id: 0, stack: Vec::new() }
+	pub fn new(flattree: Vec<Node<'static>>) -> io::Result<Self> {
+		Ok(TreeView {
+			flattree,
+			cursor: 0,
+			selections: HashMap::new(),
+			root_id: 0,
+			stack: Vec::new(),
+			constr: TreeViewConstraints::new()?,
+		})
 	}
 
 	pub fn reset(&mut self, flattree: Vec<Node<'static>>) {
@@ -179,9 +187,9 @@ impl<'s, T: Iterator<Item = &'s u64>> Iterator for SelectionIds<'s, T> {
 	}
 }
 
-impl BufPrint<TreeView, TreeViewConstraints> for Screen {
-	fn bufprint(&mut self, view: &TreeView, constr: &TreeViewConstraints) -> io::Result<&mut Self> {
-		let mut painter = TreeViewPainter::new(self, view, constr)?;
+impl BufPrint<TreeView> for Screen {
+	fn bufprint(&mut self, view: &TreeView) -> io::Result<&mut Self> {
+		let mut painter = TreeViewPainter::new(self, view, &view.constr)?;
 		painter.paint_sel_task()?;
 		painter.print_tasks()?;
 		painter.paint_div_lines()?;

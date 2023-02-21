@@ -61,8 +61,8 @@ impl Application {
 
 	fn draw(&mut self) -> io::Result<()> {
 		match self.view {
-			View::Tree => self.screen.bufprint(&self.tvc, &())?,
-			View::Session => self.screen.bufprint(&self.svc, &())?,
+			View::Tree => self.screen.bufprint(&self.tvc)?,
+			View::Session => self.screen.bufprint(&self.svc)?,
 		};
 		Ok(())
 	}

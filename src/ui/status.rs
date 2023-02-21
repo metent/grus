@@ -9,15 +9,17 @@ pub struct StatusView {
 	input: Input,
 	buffer: String,
 	title: &'static str,
+	pub constr: StatusViewConstraints,
 }
 
 impl StatusView {
-	pub fn new() -> Self {
-		StatusView {
+	pub fn new() -> io::Result<Self> {
+		Ok(StatusView {
 			input: Input { front: "".into(), back: "".into() },
 			buffer: "".into(),
 			title: "",
-		}
+			constr: StatusViewConstraints::new()?,
+		})
 	}
 
 	pub fn set_title(&mut self, title: &'static str) {
@@ -68,10 +70,10 @@ struct Input {
 	back: String,
 }
 
-impl BufPrint<StatusView, StatusViewConstraints> for Screen {
-	fn bufprint(&mut self, view: &StatusView, constr: &StatusViewConstraints) -> io::Result<&mut Self> {
+impl BufPrint<StatusView> for Screen {
+	fn bufprint(&mut self, view: &StatusView) -> io::Result<&mut Self> {
 		self.stdout
-			.queue(MoveTo(constr.status.x, constr.status.y))?
+			.queue(MoveTo(view.constr.status.x, view.constr.status.y))?
 			.queue(Print(view.title))?
 			.queue(Print(&view.input.front))?
 			.queue(SetColors(Colors::new(Color::Black, Color::White)))?

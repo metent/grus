@@ -12,15 +12,21 @@ pub struct SessionView {
 	items: Vec<Item>,
 	cursor: usize,
 	start: usize,
-	height: u16,
 	heights: Vec<u16>,
+	pub constr: SessionViewConstraints,
 }
 
 impl SessionView {
-	pub fn new(items: Vec<Item>, len: u16) -> Self {
-		let mut sv = SessionView { items, cursor: 0, start: 0, height: len, heights: Vec::new() };
+	pub fn new(items: Vec<Item>) -> io::Result<Self> {
+		let mut sv = SessionView {
+			items,
+			cursor: 0,
+			start: 0,
+			heights: Vec::new(),
+			constr: SessionViewConstraints::new()?,
+		};
 		sv.anchor_top(sv.cursor);
-		sv
+		Ok(sv)
 	}
 
 	pub fn reset(&mut self, items: Vec<Item>) {
@@ -52,12 +58,11 @@ impl SessionView {
 		self.anchor_top(self.start);
 	}
 
-	pub fn resize(&mut self, len: u16, tasks_width: usize, session_width: usize) {
+	pub fn resize(&mut self, tasks_width: usize, session_width: usize) {
 		for item in self.items.iter_mut() {
 			item.name_splits = wrap_text(&item.name, tasks_width);
 			item.session_splits = wrap_text(&item.session_text, session_width);
 		}
-		self.height = len;
 		self.anchor_top(self.start);
 	}
 
@@ -94,7 +99,7 @@ impl SessionView {
 		self.heights.clear();
 		let mut h = 0;
 		for item in &self.items[index..] {
-			if h + item.height() > self.height { break }
+			if h + item.height() > self.constr.session_height() { break }
 			self.heights.push(h);
 			h += item.height();
 		}
@@ -102,7 +107,7 @@ impl SessionView {
 	}
 
 	fn anchor_bottom(&mut self, index: usize) {
-		let mut h = self.height;
+		let mut h = self.constr.session_height();
 		self.heights.clear();
 		for item in self.items[..=index].iter().rev() {
 			if h < item.height() { break }
@@ -142,15 +147,15 @@ impl Item {
 	}
 }
 
-impl BufPrint<SessionView, SessionViewConstraints> for Screen {
-	fn bufprint(&mut self, view: &SessionView, constr: &SessionViewConstraints) -> io::Result<&mut Self> {
+impl BufPrint<SessionView> for Screen {
+	fn bufprint(&mut self, view: &SessionView) -> io::Result<&mut Self> {
 		let mut h = 0;
 		for (i, item) in view.items[view.window()].iter().enumerate() {
 			if view.start + i == view.cursor {
 				let area = Rect {
-					x: constr.session.x,
-					y: constr.session.y + h,
-					w: constr.session.w + constr.tasks.w + 1,
+					x: view.constr.session.x,
+					y: view.constr.session.y + h,
+					w: view.constr.session.w + view.constr.tasks.w + 1,
 					h: item.height(),
 				};
 				self.paint(area, Colors::new(Color::Black, Color::White))?;
@@ -161,12 +166,12 @@ impl BufPrint<SessionView, SessionViewConstraints> for Screen {
 		h = 0;
 		for (i, item) in view.items[view.window()].iter().enumerate() {
 			if view.start + i == view.cursor {
-				self.print_item(item, h, Colors::new(Color::Black, Color::White), constr)?;
+				self.print_item(item, h, Colors::new(Color::Black, Color::White), &view.constr)?;
 			} else {
 				self.print_item(item, h, Colors {
 					foreground: Some(Color::White),
 					background: None,
-				}, constr)?;
+				}, &view.constr)?;
 			}
 			h += item.height();
 		}

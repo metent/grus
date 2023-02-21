@@ -38,8 +38,8 @@ impl Screen {
 	}
 }
 
-pub trait BufPrint<V, C> {
-	fn bufprint(&mut self, view: &V, constr: &C) -> io::Result<&mut Self>;
+pub trait BufPrint<V> {
+	fn bufprint(&mut self, view: &V) -> io::Result<&mut Self>;
 }
 
 #[derive(Default)]

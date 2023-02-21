@@ -10,26 +10,21 @@ use interim::{parse_date_string, Dialect};
 use crate::app::{Action, CommandType, Error, Mode, View};
 use crate::flattree::{FlatTreeBuilder, FlatTreeState};
 use crate::node::{Displayable, Node, Priority, wrap_text};
-use crate::ui::{BufPrint, Screen, StatusViewConstraints, TreeViewConstraints};
+use crate::ui::{BufPrint, Screen};
 use crate::ui::tree::TreeView;
 use crate::ui::status::StatusView;
 
 pub struct TreeViewController {
 	tree_view: TreeView,
-	tvconstr: TreeViewConstraints,
 	status_view: StatusView,
-	svconstr: StatusViewConstraints,
 	mode: Mode,
 }
 
 impl TreeViewController {
 	pub fn new(store: &Store) -> Result<Self, Error> {
-		let tvconstr = TreeViewConstraints::new()?;
 		let mut tvc = TreeViewController {
-			tree_view: TreeView::new(Vec::new()),
-			tvconstr,
-			status_view: StatusView::new(),
-			svconstr: StatusViewConstraints::new()?,
+			tree_view: TreeView::new(Vec::new())?,
+			status_view: StatusView::new()?,
 			mode: Mode::Normal,
 		};
 		tvc.update_tree_view(store)?;
@@ -86,8 +81,8 @@ impl TreeViewController {
 	}
 
 	pub fn resize(&mut self, store: &Store, w: u16, h: u16) -> Result<(), Error> {
-		self.tvconstr.update(w, h);
-		self.svconstr.update(w, h);
+		self.tree_view.constr.update(w, h);
+		self.status_view.constr.update(w, h);
 		self.update_tree_view(store)?;
 		Ok(())
 	}
@@ -272,10 +267,10 @@ impl TreeViewController {
 	fn update_tree_view(&mut self, store: &Store) -> Result<(), Error> {
 		let flattree = TreeViewReader {
 			reader: store.reader()?,
-			height: self.tvconstr.tree_height(),
-			tasks_width: self.tvconstr.tree_width(),
-			session_width: self.tvconstr.session_width(),
-			due_date_width: self.tvconstr.due_date_width(),
+			height: self.tree_view.constr.tree_height(),
+			tasks_width: self.tree_view.constr.tree_width(),
+			session_width: self.tree_view.constr.session_width(),
+			due_date_width: self.tree_view.constr.due_date_width(),
 		}.build_flattree(self.tree_view.root_id)?;
 		self.tree_view.reset(flattree);
 		Ok(())
@@ -358,17 +353,17 @@ impl<'store> TreeViewReader<'store> {
 	}
 }
 
-impl BufPrint<TreeViewController, ()> for Screen {
-	fn bufprint(&mut self, tvc: &TreeViewController, _: &()) -> io::Result<&mut Self> {
+impl BufPrint<TreeViewController> for Screen {
+	fn bufprint(&mut self, tvc: &TreeViewController) -> io::Result<&mut Self> {
 		match tvc.mode {
 			Mode::Normal => self
 				.clear()?
-				.bufprint(&tvc.tree_view, &tvc.tvconstr)?
+				.bufprint(&tvc.tree_view)?
 				.flush()?,
 			Mode::Command(_) => self
 				.clear()?
-				.bufprint(&tvc.status_view, &tvc.svconstr)?
-				.bufprint(&tvc.tree_view, &tvc.tvconstr)?
+				.bufprint(&tvc.status_view)?
+				.bufprint(&tvc.tree_view)?
 				.flush()?,
 		}
 		Ok(self)
