@@ -6,27 +6,23 @@ use crossterm::cursor::MoveTo;
 use crossterm::style::{Color, Colors, Print, ResetColor, SetColors};
 use super::{BufPrint, Screen, StatusViewConstraints};
 
-pub struct StatusView {
+pub struct StatusView<const V: usize> {
 	input: Input,
 	start: usize,
 	buffer: String,
-	title: &'static str,
+	pub mode: Mode,
 	pub constr: StatusViewConstraints,
 }
 
-impl StatusView {
+impl<const V: usize> StatusView<V> {
 	pub fn new() -> io::Result<Self> {
 		Ok(StatusView {
 			input: Input { front: "".into(), back: "".into() },
 			start: 0,
 			buffer: "".into(),
-			title: "",
+			mode: Mode::Normal,
 			constr: StatusViewConstraints::new()?,
 		})
-	}
-
-	pub fn set_title(&mut self, title: &'static str) {
-		self.title = title;
 	}
 
 	pub fn set_input(&mut self, input: &str) {
@@ -81,20 +77,59 @@ impl StatusView {
 	}
 
 	fn cmd_width(&self) -> usize {
-		usize::from(self.constr.status.w) - self.title.len()
+		if let Mode::Command(cmd_type) = self.mode {
+			usize::from(self.constr.status.w) - COMMAND_TEXT[cmd_type as usize].len() - VIEW_TEXT[V].len()
+		} else { 0 }
 	}
 }
+
+#[derive(Copy, Clone)]
+pub enum Mode {
+	Normal,
+	Command(CommandType),
+}
+
+#[derive(Copy, Clone)]
+pub enum CommandType {
+	AddChild,
+	Rename,
+	SetDueDate,
+	AddSession,
+}
+
+impl Display for CommandType {
+	fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+		write!(f, "{}", COMMAND_TEXT[*self as usize])
+	}
+}
+
+const VIEW_TEXT: &[&str] = &[
+	" TREE VIEW ",
+	" SESSION VIEW ",
+];
+
+const COMMAND_TEXT: &[&str] = &[
+	"add: ",
+	"rename: ",
+	"due date: ",
+	"add session: ",
+];
 
 struct Input {
 	front: String,
 	back: String,
 }
 
-impl BufPrint<StatusView> for Screen {
-	fn bufprint(&mut self, view: &StatusView) -> io::Result<&mut Self> {
+impl<const V: usize> BufPrint<StatusView<V>> for Screen {
+	fn bufprint(&mut self, view: &StatusView<V>) -> io::Result<&mut Self> {
+		self.stdout
+			.queue(MoveTo(view.constr.status.x + view.constr.status.w - VIEW_TEXT[V].len() as u16, view.constr.status.y))?
+			.queue(Print(VIEW_TEXT[V]))?;
+
+		let Mode::Command(cmd_type) = view.mode else { return Ok(self) };
 		self.stdout
 			.queue(MoveTo(view.constr.status.x, view.constr.status.y))?
-			.queue(Print(view.title))?
+			.queue(Print(Print(cmd_type)))?
 			.queue(Print(&view.input.front[view.start..]))?
 			.queue(SetColors(Colors::new(Color::Black, Color::White)))?
 			.queue(Print(view.input.back.chars().rev().next().unwrap_or(' ')))?

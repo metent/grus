@@ -80,20 +80,6 @@ pub enum View {
 	Session,
 }
 
-#[derive(Copy, Clone)]
-pub enum Mode {
-	Normal,
-	Command(CommandType),
-}
-
-#[derive(Copy, Clone)]
-pub enum CommandType {
-	AddChild,
-	Rename,
-	SetDueDate,
-	AddSession,
-}
-
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
 	#[error("Store Error: {0}")]

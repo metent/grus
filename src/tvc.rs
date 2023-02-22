@@ -7,17 +7,16 @@ use grus_lib::Store;
 use grus_lib::reader::StoreReader;
 use grus_lib::types::Session;
 use interim::{parse_date_string, Dialect};
-use crate::app::{Action, CommandType, Error, Mode, View};
+use crate::app::{Action, Error, View};
 use crate::flattree::{FlatTreeBuilder, FlatTreeState};
 use crate::node::{Displayable, Node, Priority, wrap_text};
 use crate::ui::{BufPrint, Screen};
 use crate::ui::tree::TreeView;
-use crate::ui::status::StatusView;
+use crate::ui::status::{CommandType, Mode, StatusView};
 
 pub struct TreeViewController {
 	tree_view: TreeView,
-	status_view: StatusView,
-	mode: Mode,
+	status_view: StatusView<{View::Tree as usize}>,
 }
 
 impl TreeViewController {
@@ -25,7 +24,6 @@ impl TreeViewController {
 		let mut tvc = TreeViewController {
 			tree_view: TreeView::new(Vec::new())?,
 			status_view: StatusView::new()?,
-			mode: Mode::Normal,
 		};
 		tvc.update_tree_view(store)?;
 		Ok(tvc)
@@ -33,7 +31,7 @@ impl TreeViewController {
 
 	pub fn run(&mut self, store: &Store) -> Result<Action, Error> {
 		match event::read()? {
-			Event::Key(kev) => match self.mode {
+			Event::Key(kev) => match self.status_view.mode {
 				Mode::Normal => match kev.code {
 					KeyCode::Char('q') => return Ok(Action::Quit),
 					KeyCode::Char('j') | KeyCode::Down => self.tree_view.cursor_down(),
@@ -90,17 +88,11 @@ impl TreeViewController {
 	fn enter_command_mode(&mut self, cmd: CommandType) {
 		let Some(node) = self.tree_view.cursor_node() else { return };
 
-		self.mode = Mode::Command(cmd);
-		let title = match cmd {
-			CommandType::AddChild => "add: ",
-			CommandType::Rename => {
-				self.status_view.set_input(&node.name);
-				"rename: "
-			}
-			CommandType::SetDueDate => "due date: ",
-			CommandType::AddSession => "add session: ",
+		self.status_view.mode = Mode::Command(cmd);
+		match cmd {
+			CommandType::Rename => self.status_view.set_input(&node.name),
+			_ => {},
 		};
-		self.status_view.set_title(title);
 	}
 
 	fn add_child(&mut self, store: &Store) -> Result<(), Error> {
@@ -261,7 +253,7 @@ impl TreeViewController {
 
 	fn cancel(&mut self) {
 		self.status_view.clear();
-		self.mode = Mode::Normal;
+		self.status_view.mode = Mode::Normal;
 	}
 
 	fn update_tree_view(&mut self, store: &Store) -> Result<(), Error> {
@@ -355,17 +347,11 @@ impl<'store> TreeViewReader<'store> {
 
 impl BufPrint<TreeViewController> for Screen {
 	fn bufprint(&mut self, tvc: &TreeViewController) -> io::Result<&mut Self> {
-		match tvc.mode {
-			Mode::Normal => self
-				.clear()?
-				.bufprint(&tvc.tree_view)?
-				.flush()?,
-			Mode::Command(_) => self
-				.clear()?
-				.bufprint(&tvc.status_view)?
-				.bufprint(&tvc.tree_view)?
-				.flush()?,
-		}
+		self
+			.clear()?
+			.bufprint(&tvc.status_view)?
+			.bufprint(&tvc.tree_view)?
+			.flush()?;
 		Ok(self)
 	}
 }

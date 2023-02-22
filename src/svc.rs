@@ -3,16 +3,15 @@ use crossterm::terminal;
 use crossterm::event::{self, KeyCode, Event};
 use grus_lib::Store;
 use grus_lib::reader::StoreReader;
-use crate::app::{Action, Error, Mode, View};
+use crate::app::{Action, Error, View};
 use crate::node::{wrap_text, Displayable};
 use crate::ui::{BufPrint, Screen, SessionViewMode};
 use crate::ui::session::{Item, SessionView};
-use crate::ui::status::StatusView;
+use crate::ui::status::{Mode, StatusView};
 
 pub struct SessionViewController {
 	session_view: SessionView,
-	status_view: StatusView,
-	mode: Mode,
+	status_view: StatusView<{View::Session as usize}>,
 }
 
 impl SessionViewController {
@@ -20,7 +19,6 @@ impl SessionViewController {
 		let mut svc = SessionViewController {
 			session_view: SessionView::new(Vec::new())?,
 			status_view: StatusView::new()?,
-			mode: Mode::Normal,
 		};
 		svc.update_session_view(store)?;
 		Ok(svc)
@@ -28,7 +26,7 @@ impl SessionViewController {
 
 	pub fn run(&mut self, store: &Store) -> Result<Action, Error> {
 		match event::read()? {
-			Event::Key(kev) => match self.mode {
+			Event::Key(kev) => match self.status_view.mode {
 				Mode::Normal => match kev.code {
 					KeyCode::Char('q') => return Ok(Action::Quit),
 					KeyCode::Char('j') | KeyCode::Down => self.session_view.cursor_down(),
@@ -106,7 +104,7 @@ impl SessionViewController {
 
 	fn cancel(&mut self) {
 		self.status_view.clear();
-		self.mode = Mode::Normal;
+		self.status_view.mode = Mode::Normal;
 	}
 }
 
@@ -146,17 +144,11 @@ impl<'store> SessionViewReader<'store> {
 
 impl BufPrint<SessionViewController> for Screen {
 	fn bufprint(&mut self, svc: &SessionViewController) -> io::Result<&mut Self> {
-		match svc.mode {
-			Mode::Normal => self
-				.clear()?
-				.bufprint(&svc.session_view)?
-				.flush()?,
-			Mode::Command(_) => self
-				.clear()?
-				.bufprint(&svc.status_view)?
-				.bufprint(&svc.session_view)?
-				.flush()?,
-		}
+		self
+			.clear()?
+			.bufprint(&svc.status_view)?
+			.bufprint(&svc.session_view)?
+			.flush()?;
 		Ok(self)
 	}
 }
