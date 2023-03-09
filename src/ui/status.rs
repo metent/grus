@@ -124,7 +124,9 @@ impl<const V: usize> BufPrint<StatusView<V>> for Screen {
 	fn bufprint(&mut self, view: &StatusView<V>) -> io::Result<&mut Self> {
 		self.stdout
 			.queue(MoveTo(view.constr.status.x + view.constr.status.w - VIEW_TEXT[V].len() as u16, view.constr.status.y))?
-			.queue(Print(VIEW_TEXT[V]))?;
+			.queue(SetColors(Colors::new(Color::Black, Color::DarkCyan)))?
+			.queue(Print(VIEW_TEXT[V]))?
+			.queue(Print(ResetColor))?;
 
 		let Mode::Command(cmd_type) = view.mode else { return Ok(self) };
 		self.stdout
