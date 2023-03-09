@@ -13,9 +13,9 @@ categories = ["command-line-utilities"]
 
 [dependencies]
 chrono = "0.4.23"
-crossterm = "0.26.0"
+crossterm = "0.26.1"
 dirs = "4.0.0"
 grus-lib = { version = "0.1.0", features = ["interim"] }
 interim = { version = "0.1.0", features = ["chrono"] }
 sanakirja = "1.2.16"
-thiserror = "1.0.38"
+thiserror = "1.0.39"
