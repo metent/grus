@@ -10,7 +10,7 @@ Task management should be quick and should not require much thought. `grus` help
 
 ## Features
 
-- Quick workflow
+- Quick workflow, minimizes number of keystrokes required for each operation
 - BFS-based view of tasks inspired by [broot](https://github.com/Canop/broot)
 - Multiple tasks can have the same child task, inspired by [grit](https://github.com/climech/grit)
 - vi-like key bindings
@@ -67,8 +67,14 @@ Make sure to include `$HOME/.cargo/bin` in the `PATH` variable.
 ## Roadmap
 
 - [x] Basic todo functionality
+- [ ] Configuration
+  - [ ] Config file
+    - [ ] Keybinding configuration
+    - [ ] Import and Export path configuration
+  - [ ] Command-line arguments
+    - [ ] Config file path
+- [ ] Notifications
+- [ ] Recurring tasks/Repeating sessions
 - [ ] Task sorting by score
 - [ ] Decorations
-- [ ] Task cut/yank and paste
 - [ ] Fuzzy search tasks
-- [ ] Notifications
