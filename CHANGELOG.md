@@ -14,6 +14,9 @@
 - Multiple sessions can now be added to tasks using add session action.
 - New view: session view. Lists all sessions and the tasks to which they belong, in incresing order of session start time.
 - Task sub-mode in session view. Lists sessions of a single task. This sub-mode can be accessed in either tree or session view.
+- Better cursor retention while performing an action on a task.
+- Last line now scrolls automatically depending on cursor position and the cursor can now be moved using arrow keys.
+- Database can now be imported and exported.
 
 #### Fixed
 
