@@ -50,6 +50,8 @@ Make sure to include `$HOME/.cargo/bin` in the `PATH` variable.
 |          .           | Make the selected tasks children of current task while retaining its link with the previous parent |
 |          q           | Quit grus                                                                                          |
 |          2           | Switch to session view                                                                             |
+|          I           | Import database from ~/sync/tasks                                                                  |
+|          E           | Export database to ~/sync/tasks                                                                    |
 
 ### Session View
 
