@@ -1,15 +1,12 @@
 use std::collections::HashSet;
 use std::io;
-use std::str::FromStr;
-use chrono::Local;
 use crossterm::event::{self, KeyCode, Event};
 use grus_lib::Store;
 use grus_lib::reader::StoreReader;
-use grus_lib::types::Session;
-use interim::{parse_date_string, Dialect};
 use crate::app::{Action, Error, View};
 use crate::flattree::{FlatTreeBuilder, FlatTreeState};
 use crate::node::{Displayable, Node, Priority, wrap_text};
+use crate::parser::{parse_datetime, parse_session};
 use crate::ui::{BufPrint, Screen};
 use crate::ui::tree::TreeView;
 use crate::ui::status::{CommandType, Mode, StatusView};
@@ -146,11 +143,11 @@ impl TreeViewController {
 
 	fn set_due_date(&mut self, store: &Store) -> Result<(), Error> {
 		let mut writer = store.writer()?;
-		let Ok(due_date) = parse_date_string(self.status_view.input(), Local::now(), Dialect::Uk) else {
+		let Ok(due_date) = parse_datetime(self.status_view.input()) else {
 			return Ok(());
 		};
 		for &id in self.tree_view.selection_ids() {
-			writer.set_due_date(id, due_date.naive_local())?;
+			writer.set_due_date(id, due_date)?;
 		}
 		writer.commit()?;
 
@@ -178,7 +175,7 @@ impl TreeViewController {
 
 		let mut writer = store.writer()?;
 
-		let Ok(session) = Session::from_str(&self.status_view.input()) else { return Ok(()) };
+		let Ok(session) = parse_session(&self.status_view.input()) else { return Ok(()) };
 		writer.add_session(node.id, &session)?;
 		writer.commit()?;
 
