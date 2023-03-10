@@ -50,8 +50,8 @@ impl TreeViewController {
 						return Ok(Action::TaskSessions(node.id));
 					},
 					KeyCode::Char('2') => return Ok(Action::Switch(View::Session)),
-					KeyCode::Char('i') => return Ok(Action::Import),
-					KeyCode::Char('e') => return Ok(Action::Export),
+					KeyCode::Char('I') => return Ok(Action::Import),
+					KeyCode::Char('E') => return Ok(Action::Export),
 					_ => {},
 				}
 				Mode::Command(cmd) => match kev.code {
