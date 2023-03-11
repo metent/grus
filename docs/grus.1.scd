@@ -16,16 +16,46 @@ Task management should be quick and should not require much thought. grus helps 
 
 # CONCEPTS
 
-## Session
-
-Each task can be scheduled any number of times using sessions. Each session has a start date and due date.
-
 ## View
 
 Tasks can be displayed to the user in different ways, called views, depending on the requirement of the user. There are currently 2 types of views:
 
 - Tree View
 - Session View
+
+## Due Date
+
+Each task can have at most a single due date which marks the deadline of completing the particular task. Due dates can be assigned to the selected task(s) in the tree view using the key z. On pressing this key, the last line prompt enters, which asks the user for a due date. Due dates can be entered in the following formats:
+
+- <date> <time>
+- <date>
+- <time>
+
+where <date> is replaced by any of the following:
+
+- today
+- tomorrow
+- monday
+- tuesday
+- wednesday
+- thursday
+- friday
+- saturday
+- sunday
+- dd/mm/yyyy format like 12/05/2023
+
+and <time> is replaced by 12-hour clock time like 12:03 PM or 4 am.
+
+## Session
+
+Each task can be scheduled any number of times using sessions. Each session has a start date and end date. Sessions can be added to the selected task(s) in the tree view using the key s. On pressing this key, the last line prompt enters, which asks the user for a session. Sessions can be entered in the following formats:
+
+- <date> <time> to <date> <time>
+- <date> <time> to <time>
+- <time> to <date> <time>
+- <time> to <time>
+
+where <date> and <time> are replaced according to the rules discussed in the Due Date section.
 
 # TREE VIEW
 
