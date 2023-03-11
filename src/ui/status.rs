@@ -78,7 +78,7 @@ impl<const V: usize> StatusView<V> {
 
 	fn cmd_width(&self) -> usize {
 		if let Mode::Command(cmd_type) = self.mode {
-			usize::from(self.constr.status.w) - COMMAND_TEXT[cmd_type as usize].len() - VIEW_TEXT[V].len()
+			usize::from(self.constr.status.w).saturating_sub(COMMAND_TEXT[cmd_type as usize].len()).saturating_sub(VIEW_TEXT[V].len())
 		} else { 0 }
 	}
 }
@@ -122,11 +122,15 @@ struct Input {
 
 impl<const V: usize> BufPrint<StatusView<V>> for Screen {
 	fn bufprint(&mut self, view: &StatusView<V>) -> io::Result<&mut Self> {
-		self.stdout
-			.queue(MoveTo(view.constr.status.x + view.constr.status.w - VIEW_TEXT[V].len() as u16, view.constr.status.y))?
-			.queue(SetColors(Colors::new(Color::Black, Color::DarkCyan)))?
-			.queue(Print(VIEW_TEXT[V]))?
-			.queue(Print(ResetColor))?;
+		if VIEW_TEXT[V].len() <= view.constr.status.w.into() {
+			self.stdout
+				.queue(MoveTo(view.constr.status.x + view.constr.status.w - VIEW_TEXT[V].len() as u16, view.constr.status.y))?
+				.queue(SetColors(Colors::new(Color::Black, Color::DarkCyan)))?
+				.queue(Print(VIEW_TEXT[V]))?
+				.queue(Print(ResetColor))?;
+		}
+
+		if view.cmd_width() == 0 { return Ok(self) };
 
 		let Mode::Command(cmd_type) = view.mode else { return Ok(self) };
 		self.stdout

@@ -17,6 +17,13 @@ impl Screen {
 		Ok(Screen { stdout: stdout() })
 	}
 
+	pub fn draw_vline(&mut self, x: u16, y: u16, h: u16) -> io::Result<()> {
+		for y in y..y + h {
+			self.stdout.queue(MoveTo(x, y))?.queue(Print('│'))?;
+		}
+		Ok(())
+	}
+
 	pub fn paint(&mut self, area: Rect, colors: Colors) -> io::Result<()> {
 		self.stdout.queue(SetColors(colors))?;
 		for y in area.y..area.y + area.h {

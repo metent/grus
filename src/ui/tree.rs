@@ -88,7 +88,7 @@ impl TreeView {
 	}
 
 	pub fn cursor_down(&mut self) {
-		if self.cursor < self.flattree.len() - 1 {
+		if self.cursor + 1 < self.flattree.len() {
 			self.cursor += 1;
 		}
 	}
@@ -193,6 +193,7 @@ impl BufPrint<TreeView> for Screen {
 		painter.paint_sel_task()?;
 		painter.print_tasks()?;
 		painter.paint_div_lines()?;
+		painter.paint_col_lines()?;
 		Ok(self)
 	}
 }
@@ -391,6 +392,25 @@ impl<'screen, 'view, 'constr> TreeViewPainter<'screen, 'view, 'constr> {
 			.queue(SetForegroundColor(color_from_prio(&task.priority)))?
 			.queue(Print("•"))?
 			.queue(ResetColor)?;
+		Ok(())
+	}
+
+	fn paint_col_lines(&mut self) -> io::Result<()> {
+		let mut h = 0;
+		for (i, task) in self.view.flattree.iter().enumerate() {
+			match (i == self.view.cursor, self.view.is_selected(task.pid, task.id)) {
+				(true, true) => self.screen.stdout.queue(SetColors(Colors::new(Color::White, Color::Blue)))?,
+				(true, false) => self.screen.stdout.queue(SetColors(Colors::new(Color::Black, Color::White)))?,
+				(false, true) => self.screen.stdout.queue(SetColors(Colors::new(Color::White, Color::DarkBlue)))?,
+				(false, false) => &mut self.screen.stdout,
+			};
+
+			self.screen.draw_vline(self.constr.session.x - 1, self.constr.session.y + h, task.height() as u16)?;
+			self.screen.draw_vline(self.constr.due_date.x - 1, self.constr.due_date.y + h, task.height() as u16)?;
+			self.screen.stdout.queue(ResetColor)?;
+
+			h += task.height() as u16;
+		}
 		Ok(())
 	}
 }
