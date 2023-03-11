@@ -78,7 +78,7 @@ impl<const V: usize> StatusView<V> {
 
 	fn cmd_width(&self) -> usize {
 		if let Mode::Command(cmd_type) = self.mode {
-			usize::from(self.constr.status.w).saturating_sub(COMMAND_TEXT[cmd_type as usize].len()).saturating_sub(VIEW_TEXT[V].len())
+			usize::from(self.constr.status.w).saturating_sub(COMMAND_TEXT[cmd_type as usize].len() + 1).saturating_sub(VIEW_TEXT[V].len())
 		} else { 0 }
 	}
 }
@@ -109,10 +109,10 @@ const VIEW_TEXT: &[&str] = &[
 ];
 
 const COMMAND_TEXT: &[&str] = &[
-	"add: ",
-	"rename: ",
-	"due date: ",
-	"add session: ",
+	" add ",
+	" rename ",
+	" due date ",
+	" add session ",
 ];
 
 struct Input {
@@ -135,7 +135,10 @@ impl<const V: usize> BufPrint<StatusView<V>> for Screen {
 		let Mode::Command(cmd_type) = view.mode else { return Ok(self) };
 		self.stdout
 			.queue(MoveTo(view.constr.status.x, view.constr.status.y))?
+			.queue(SetColors(Colors::new(Color::Black, Color::Yellow)))?
 			.queue(Print(Print(cmd_type)))?
+			.queue(ResetColor)?
+			.queue(Print(' '))?
 			.queue(Print(&view.input.front[view.start..]))?
 			.queue(SetColors(Colors::new(Color::Black, Color::White)))?
 			.queue(Print(view.input.back.chars().rev().next().unwrap_or(' ')))?
