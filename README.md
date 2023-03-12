@@ -38,7 +38,7 @@ Make sure to include `$HOME/.cargo/bin` in the `PATH` variable.
 |          h           | Make previously selected task up the heirarchy, the root task                                      |
 |          v           | View all sessions of the current task                                                              |
 |          a           | Add a subtask of the selected task with given name                                                 |
-|          d           | Delete the selected task and all of its descendents                                                |
+|          D           | Delete the selected task and all of its descendents                                                |
 |          r           | Rename the selected task                                                                           |
 |          z           | Add a due date to the selected task                                                                |
 |          Z           | Unset due date of the selected task                                                                |
@@ -60,7 +60,7 @@ Make sure to include `$HOME/.cargo/bin` in the `PATH` variable.
 |  k or <kbd>up</kbd>  | Move cursor up         |
 | j or <kbd>down</kbd> | Move cursor down       |
 |          v           | Toggle sub-mode        |
-|          d           | Delete current session |
+|          D           | Delete current session |
 |          q           | Quit grus              |
 |          1           | Switch to tree view    |
 

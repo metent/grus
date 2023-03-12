@@ -45,7 +45,7 @@ impl TreeViewController {
 					KeyCode::Char('Z') => self.unset_due_date(store)?,
 					KeyCode::Char('K') => self.priority_up(store)?,
 					KeyCode::Char('J') => self.priority_down(store)?,
-					KeyCode::Char('d') => self.delete(store)?,
+					KeyCode::Char('D') => self.delete(store)?,
 					KeyCode::Char('v') => if let Some(node) = self.tree_view.cursor_node() {
 						return Ok(Action::TaskSessions(node.id));
 					},

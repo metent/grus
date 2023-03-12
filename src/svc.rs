@@ -31,7 +31,7 @@ impl SessionViewController {
 					KeyCode::Char('q') => return Ok(Action::Quit),
 					KeyCode::Char('j') | KeyCode::Down => self.session_view.cursor_down(),
 					KeyCode::Char('k') | KeyCode::Up => self.session_view.cursor_up(),
-					KeyCode::Char('d') => self.delete(store)?,
+					KeyCode::Char('D') => self.delete(store)?,
 					KeyCode::Char('v') if self.session_view.constr.mode == SessionViewMode::Normal
 					=> if let Some((id, _)) = self.session_view.session_and_id() {
 						self.change_mode(store, SessionViewMode::Task(id))?;

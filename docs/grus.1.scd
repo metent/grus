@@ -91,7 +91,7 @@ Session View views all the sessions assigned to every task in chronological orde
 *a*
 	Add a subtask of the selected task with given name
 
-*d*
+*D*
 	Delete the selected task and all of its descendents
 
 *r*
@@ -144,7 +144,7 @@ Session View views all the sessions assigned to every task in chronological orde
 *v*
 	Toggle sub-mode
 
-*d*
+*D*
 	Delete current session
 
 *q*
