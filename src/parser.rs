@@ -3,7 +3,7 @@ use chrono::naive::Days;
 use grus_lib::types::Session;
 use winnow::{IResult, Parser};
 use winnow::branch::alt;
-use winnow::bytes::{tag, take, take_until1, take_while0, take_while1};
+use winnow::bytes::{tag, tag_no_case, take, take_until1, take_while0, take_while1};
 use winnow::error::{ErrMode, Error, ErrorKind, FinishIResult};
 use winnow::sequence::separated_pair;
 use winnow::stream::AsChar;
@@ -29,7 +29,7 @@ pub fn parse_datetime(s: &str) -> Result<NaiveDateTime, Error<&str>> {
 	alt((
 		datetime,
 		time.map(|time| NaiveDateTime::new(Local::now().date_naive(), time)),
-		date.map(|date| NaiveDateTime::new(date, Local::now().time())),
+		date.map(|date| NaiveDateTime::new(date, NaiveTime::default())),
 	))(s).finish()
 }
 
@@ -80,9 +80,10 @@ fn quick_time(s: &str) -> IResult<&str, NaiveTime> {
 
 fn date(s: &str) -> IResult<&str, NaiveDate> {
 	alt((
-		tag("today").map(|_| Local::now().date_naive()),
-		tag("yesterday").map(|_| Local::now().date_naive() - Days::new(1)),
-		tag("tomorrow").map(|_| Local::now().date_naive() + Days::new(1)),
+		tag_no_case("today").map(|_| Local::now().date_naive()),
+		tag_no_case("yesterday").map(|_| Local::now().date_naive() - Days::new(1)),
+		alt((tag_no_case("tmrw"), tag_no_case("tomorrow")))
+			.map(|_| Local::now().date_naive() + Days::new(1)),
 		weekday,
 		ddmmyyyy,
 	))(s)
@@ -90,13 +91,13 @@ fn date(s: &str) -> IResult<&str, NaiveDate> {
 
 fn weekday(s: &str) -> IResult<&str, NaiveDate> {
 	let (s, weekday) = alt((
-		alt((tag("mon"), tag("monday"))).map(|_| Weekday::Mon),
-		alt((tag("tue"), tag("tuesday"))).map(|_| Weekday::Tue),
-		alt((tag("wed"), tag("wednesday"))).map(|_| Weekday::Wed),
-		alt((tag("thu"), tag("thursday"))).map(|_| Weekday::Thu),
-		alt((tag("fri"), tag("friday"))).map(|_| Weekday::Fri),
-		alt((tag("sat"), tag("saturday"))).map(|_| Weekday::Sat),
-		alt((tag("sun"), tag("sunday"))).map(|_| Weekday::Sun),
+		alt((tag_no_case("mon"), tag_no_case("monday"))).map(|_| Weekday::Mon),
+		alt((tag_no_case("tue"), tag_no_case("tuesday"))).map(|_| Weekday::Tue),
+		alt((tag_no_case("wed"), tag_no_case("wednesday"))).map(|_| Weekday::Wed),
+		alt((tag_no_case("thu"), tag_no_case("thursday"))).map(|_| Weekday::Thu),
+		alt((tag_no_case("fri"), tag_no_case("friday"))).map(|_| Weekday::Fri),
+		alt((tag_no_case("sat"), tag_no_case("saturday"))).map(|_| Weekday::Sat),
+		alt((tag_no_case("sun"), tag_no_case("sunday"))).map(|_| Weekday::Sun),
 	))(s)?;
 	let today = Local::now().date_naive();
 	let delta = (weekday.num_days_from_monday() + 7 - today.weekday().num_days_from_monday()) % 7;
