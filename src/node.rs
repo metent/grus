@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 use std::cmp::max;
 use std::fmt::{self, Display, Formatter};
-use chrono::{Datelike, NaiveDateTime, Local};
+use chrono::{Datelike, NaiveDateTime, Local, Timelike};
 use grus_lib::types::Session;
 
 #[cfg_attr(test, derive(Clone, Debug, PartialEq))]
@@ -65,15 +65,29 @@ impl Display for Displayable<NaiveDateTime> {
 		let Displayable(Some(dt)) = self else { return Ok(()) };
 		let now = Local::now().naive_local();
 
-		if dt.year() != now.year() {
-			write!(f, "{}", dt.format("%e %b %Y %-I:%M %p"))
-		} else if dt.iso_week() != now.iso_week() {
-			write!(f, "{}", dt.format("%e %b %-I:%M %p"))
-		} else if dt.day() != now.day() {
-			write!(f, "{}", dt.format("%A %-I:%M %p"))
-		} else {
-			write!(f, "{}", dt.format("%-I:%M %p"))
+		let diff = (dt.date() - now.date()).num_days();
+		if diff == 1 {
+			write!(f, "{}", "Tmrw")?;
+		} else if diff > 1 && diff < 7 {
+			write!(f, "{}", dt.format("%a"))?;
+		} else if dt.year() != now.year() {
+			write!(f, "{}", dt.format("%e %b %Y"))?;
+		} else if diff != 0 {
+			write!(f, "{}", dt.format("%e %b"))?;
+		} else if dt.hour() == 0 {
+			write!(f, "today")?;
 		}
+
+		if dt.hour() == 0 { return Ok(()) };
+		if dt.date() != now.date() { write!(f, " ")? };
+
+		if dt.minute() == 0 {
+			write!(f, "{}", dt.format("%-I %p"))?;
+		} else {
+			write!(f, "{}", dt.format("%-I:%M %p"))?;
+		}
+
+		Ok(())
 	}
 }
 
