@@ -4,7 +4,7 @@ use grus_lib::types::Session;
 use winnow::{IResult, Parser};
 use winnow::branch::alt;
 use winnow::bytes::{tag, tag_no_case, take, take_until1, take_while0, take_while1};
-use winnow::error::{ErrMode, Error, ErrorKind, FinishIResult};
+use winnow::error::{ErrMode, Error, ErrorKind};
 use winnow::sequence::separated_pair;
 use winnow::stream::AsChar;
 
@@ -22,7 +22,7 @@ pub fn parse_session(s: &str) -> Result<Session, Error<&str>> {
 			start: Local::now().date_naive().and_time(t1),
 			end: Local::now().date_naive().and_time(t2)
 		}),
-	))(s).finish()
+	)).parse(s)
 }
 
 pub fn parse_datetime(s: &str) -> Result<NaiveDateTime, Error<&str>> {
@@ -30,12 +30,12 @@ pub fn parse_datetime(s: &str) -> Result<NaiveDateTime, Error<&str>> {
 		datetime,
 		time.map(|time| NaiveDateTime::new(Local::now().date_naive(), time)),
 		date.map(|date| NaiveDateTime::new(date, NaiveTime::default())),
-	))(s).finish()
+	)).parse(s)
 }
 
 fn datetime(s: &str) -> IResult<&str, NaiveDateTime> {
 	let (s, date) = date(s)?;
-	let (s, _) = take_while0(AsChar::is_space)(s)?;
+	let (s, _) = take_while0(AsChar::is_space).parse_next(s)?;
 	let (s, time) = time(s)?;
 	Ok((s, NaiveDateTime::new(date, time)))
 }
@@ -44,38 +44,38 @@ fn time(s: &str) -> IResult<&str, NaiveTime> {
 	alt((
 		proper_time,
 		quick_time,
-	))(s)
+	)).parse_next(s)
 }
 
 fn proper_time(s: &str) -> IResult<&str, NaiveTime> {
-	let (s, hour) = take_until1(":")(s)?;
-	let (s, _) = tag(":")(s)?;
-	let (s, minute) = take(2usize)(s)?;
-	let (s, _) = take_while0(AsChar::is_space)(s)?;
+	let (s, hour) = take_until1(":").parse_next(s)?;
+	let (s, _) = tag(":").parse_next(s)?;
+	let (s, minute) = take(2usize).parse_next(s)?;
+	let (s, _) = take_while0(AsChar::is_space).parse_next(s)?;
 	let (s, delta) = alt((
 		alt((tag("am"), tag("AM"))).map(|_| 0),
 		alt((tag("pm"), tag("PM"))).map(|_| 12),
-	))(s)?;
-	let mut h = hour.parse().map_err(|_| ErrMode::Cut(Error::new(s, ErrorKind::Digit)))?;
-	if h > 12 { return Err(ErrMode::Cut(Error::new(s, ErrorKind::Digit))) }
+	)).parse_next(s)?;
+	let mut h = hour.parse().map_err(|_| ErrMode::Cut(Error::new(s, ErrorKind::Token)))?;
+	if h > 12 { return Err(ErrMode::Cut(Error::new(s, ErrorKind::Token))) }
 	if h == 12 { h = 0 }
 	h += delta;
-	let m = minute.parse().map_err(|_| ErrMode::Cut(Error::new(s, ErrorKind::Digit)))?;
-	Ok((s, NaiveTime::from_hms_opt(h, m, 0).ok_or(ErrMode::Cut(Error::new(s, ErrorKind::Digit)))?))
+	let m = minute.parse().map_err(|_| ErrMode::Cut(Error::new(s, ErrorKind::Token)))?;
+	Ok((s, NaiveTime::from_hms_opt(h, m, 0).ok_or(ErrMode::Cut(Error::new(s, ErrorKind::Token)))?))
 }
 
 fn quick_time(s: &str) -> IResult<&str, NaiveTime> {
-	let (s, hour) = take_while1(AsChar::is_dec_digit)(s)?;
-	let (s, _) = take_while0(AsChar::is_space)(s)?;
+	let (s, hour) = take_while1(AsChar::is_dec_digit).parse_next(s)?;
+	let (s, _) = take_while0(AsChar::is_space).parse_next(s)?;
 	let (s, delta) = alt((
 		alt((tag("am"), tag("AM"))).map(|_| 0),
 		alt((tag("pm"), tag("PM"))).map(|_| 12),
-	))(s)?;
-	let mut h = hour.parse().map_err(|_| ErrMode::Cut(Error::new(s, ErrorKind::Digit)))?;
-	if h > 12 { return Err(ErrMode::Cut(Error::new(s, ErrorKind::Digit))) }
+	)).parse_next(s)?;
+	let mut h = hour.parse().map_err(|_| ErrMode::Cut(Error::new(s, ErrorKind::Token)))?;
+	if h > 12 { return Err(ErrMode::Cut(Error::new(s, ErrorKind::Token))) }
 	if h == 12 { h = 0 }
 	h += delta;
-	Ok((s, NaiveTime::from_hms_opt(h, 0, 0).ok_or(ErrMode::Cut(Error::new(s, ErrorKind::Digit)))?))
+	Ok((s, NaiveTime::from_hms_opt(h, 0, 0).ok_or(ErrMode::Cut(Error::new(s, ErrorKind::Token)))?))
 }
 
 fn date(s: &str) -> IResult<&str, NaiveDate> {
@@ -86,33 +86,33 @@ fn date(s: &str) -> IResult<&str, NaiveDate> {
 			.map(|_| Local::now().date_naive() + Days::new(1)),
 		weekday,
 		ddmmyyyy,
-	))(s)
+	)).parse_next(s)
 }
 
 fn weekday(s: &str) -> IResult<&str, NaiveDate> {
 	let (s, weekday) = alt((
-		alt((tag_no_case("mon"), tag_no_case("monday"))).map(|_| Weekday::Mon),
-		alt((tag_no_case("tue"), tag_no_case("tuesday"))).map(|_| Weekday::Tue),
-		alt((tag_no_case("wed"), tag_no_case("wednesday"))).map(|_| Weekday::Wed),
-		alt((tag_no_case("thu"), tag_no_case("thursday"))).map(|_| Weekday::Thu),
-		alt((tag_no_case("fri"), tag_no_case("friday"))).map(|_| Weekday::Fri),
-		alt((tag_no_case("sat"), tag_no_case("saturday"))).map(|_| Weekday::Sat),
-		alt((tag_no_case("sun"), tag_no_case("sunday"))).map(|_| Weekday::Sun),
-	))(s)?;
+		alt((tag_no_case("monday"), tag_no_case("mon"))).map(|_| Weekday::Mon),
+		alt((tag_no_case("tuesday"), tag_no_case("tue"))).map(|_| Weekday::Tue),
+		alt((tag_no_case("wednesday"), tag_no_case("wed"))).map(|_| Weekday::Wed),
+		alt((tag_no_case("thursday"), tag_no_case("thu"))).map(|_| Weekday::Thu),
+		alt((tag_no_case("friday"), tag_no_case("fri"))).map(|_| Weekday::Fri),
+		alt((tag_no_case("saturday"), tag_no_case("sat"))).map(|_| Weekday::Sat),
+		alt((tag_no_case("sunday"), tag_no_case("sun"))).map(|_| Weekday::Sun),
+	)).parse_next(s)?;
 	let today = Local::now().date_naive();
 	let delta = (weekday.num_days_from_monday() + 7 - today.weekday().num_days_from_monday()) % 7;
 	Ok((s, today + Days::new(delta.into())))
 }
 
 fn ddmmyyyy(s: &str) -> IResult<&str, NaiveDate> {
-	let (s, day) = take(2usize)(s)?;
-	let (s, _) = tag("/")(s)?;
-	let (s, month) = take(2usize)(s)?;
-	let (s, _) = tag("/")(s)?;
-	let (s, year) = take(4usize)(s)?;
+	let (s, day) = take(2usize).parse_next(s)?;
+	let (s, _) = tag("/").parse_next(s)?;
+	let (s, month) = take(2usize).parse_next(s)?;
+	let (s, _) = tag("/").parse_next(s)?;
+	let (s, year) = take(4usize).parse_next(s)?;
 	Ok((s, NaiveDate::from_ymd_opt(
-		year.parse().map_err(|_| ErrMode::Cut(Error::new(s, ErrorKind::Digit)))?,
-		month.parse().map_err(|_| ErrMode::Cut(Error::new(s, ErrorKind::Digit)))?,
-		day.parse().map_err(|_| ErrMode::Cut(Error::new(s, ErrorKind::Digit)))?,
-	).ok_or(ErrMode::Cut(Error::new(s, ErrorKind::Digit)))?))
+		year.parse().map_err(|_| ErrMode::Cut(Error::new(s, ErrorKind::Token)))?,
+		month.parse().map_err(|_| ErrMode::Cut(Error::new(s, ErrorKind::Token)))?,
+		day.parse().map_err(|_| ErrMode::Cut(Error::new(s, ErrorKind::Token)))?,
+	).ok_or(ErrMode::Cut(Error::new(s, ErrorKind::Token)))?))
 }
