@@ -31,17 +31,17 @@ Each task can have at most a single due date which marks the deadline of complet
 - <date>
 - <time>
 
-where <date> is replaced by any of the following:
+where <date> is replaced by any of the following (all are case-insensitive):
 
 - today
-- tomorrow
-- monday
-- tuesday
-- wednesday
-- thursday
-- friday
-- saturday
-- sunday
+- tomorrow or tmrw
+- monday or mon
+- tuesday or tue
+- wednesday or wed
+- thursday or thu
+- friday or fri
+- saturday or sat
+- sunday or sun
 - dd/mm/yyyy format like 12/05/2023
 
 and <time> is replaced by 12-hour clock time like 12:03 PM or 4 am.
