@@ -49,6 +49,12 @@ pub struct Priority {
 	pub total: u64,
 }
 
+impl Priority {
+	pub fn is_least(&self) -> bool {
+		self.det + 1 == self.total
+	}
+}
+
 impl Default for Priority {
 	fn default() -> Self {
 		Priority {

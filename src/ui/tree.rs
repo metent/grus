@@ -317,18 +317,18 @@ impl<'screen, 'view, 'constr> TreeViewPainter<'screen, 'view, 'constr> {
 				Some(&last) if task.depth < last => {
 					line_pos.pop();
 					if line_pos.last() == Some(&task.depth) {
-						self.paint_div_line(task, h, &line_pos, false, is_next_child)?;
+						self.paint_div_line(task, h, &line_pos, is_next_child)?;
 					} else {
 						line_pos.push(task.depth);
-						self.paint_div_line(task, h, &line_pos, true, is_next_child)?;
+						self.paint_div_line(task, h, &line_pos, is_next_child)?;
 					}
 				}
 				Some(&last) if task.depth == last => {
-					self.paint_div_line(task, h, &line_pos, false, is_next_child)?;
+					self.paint_div_line(task, h, &line_pos, is_next_child)?;
 				}
 				_ => {
 					line_pos.push(task.depth);
-					self.paint_div_line(task, h, &line_pos, true, is_next_child)?;
+					self.paint_div_line(task, h, &line_pos, is_next_child)?;
 				}
 			}
 		}
@@ -341,7 +341,6 @@ impl<'screen, 'view, 'constr> TreeViewPainter<'screen, 'view, 'constr> {
 		task: &Node,
 		dy: u16,
 		line_pos: &[usize],
-		is_last: bool,
 		next_is_child: bool,
 	) -> io::Result<()> {
 		if task.depth == 0 {
@@ -373,7 +372,7 @@ impl<'screen, 'view, 'constr> TreeViewPainter<'screen, 'view, 'constr> {
 				}
 			}
 			self.screen.stdout
-				.queue(Print(if is_last { "  " } else { "│ " }))?
+				.queue(Print(if task.priority.is_least() { "  " } else { "│ " }))?
 				.queue(Print(if next_is_child { "│" } else { " " }))?;
 		}
 
@@ -383,10 +382,10 @@ impl<'screen, 'view, 'constr> TreeViewPainter<'screen, 'view, 'constr> {
 		if color != Color::White {
 			self.screen.stdout
 				.queue(SetForegroundColor(color))?
-				.queue(Print(if is_last { "┕━" } else { "┝━" }))?
+				.queue(Print(if task.priority.is_least() { "┕━" } else { "┝━" }))?
 				.queue(ResetColor)?;
 		} else {
-			self.screen.stdout.queue(Print(if is_last { "└─" } else { "├─" }))?;
+			self.screen.stdout.queue(Print(if task.priority.is_least() { "└─" } else { "├─" }))?;
 		}
 		self.screen.stdout
 			.queue(SetForegroundColor(color_from_prio(&task.priority)))?
