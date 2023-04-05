@@ -262,7 +262,7 @@ impl TreeViewController {
 			tasks_width: self.tree_view.constr.tree_width(),
 			session_width: self.tree_view.constr.session_width(),
 			due_date_width: self.tree_view.constr.due_date_width(),
-		}.build_flattree(self.tree_view.root_id)?;
+		}.build_flattree(self.tree_view.root_pid(), self.tree_view.root_id())?;
 		self.tree_view.reset(flattree);
 		Ok(())
 	}
@@ -277,10 +277,10 @@ struct TreeViewReader<'store> {
 }
 
 impl<'store> TreeViewReader<'store> {
-	fn build_flattree(&self, id: u64) -> Result<Vec<Node<'static>>, Error> {
+	fn build_flattree(&self, pid: u64, id: u64) -> Result<Vec<Node<'static>>, Error> {
 		if self.tasks_width <= 1 { return Ok(Vec::new()) };
 
-		let root = self.get_node(id, id, 0)?;
+		let root = self.get_node(pid, id, 0)?;
 		if root.name_splits.len() - 1 > self.height { return Ok(Vec::new()) };
 		let mut builder = FlatTreeBuilder::new(root, self.height);
 		let mut ids = HashSet::new();

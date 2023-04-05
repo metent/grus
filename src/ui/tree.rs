@@ -13,8 +13,9 @@ pub struct TreeView {
 	flattree: Vec<Node<'static>>,
 	cursor: usize,
 	selections: HashMap<u64, HashSet<u64>>,
-	pub root_id: u64,
-	pub stack: Vec<u64>,
+	root_pid: u64,
+	root_id: u64,
+	stack: Vec<(u64, u64)>,
 	pub constr: TreeViewConstraints,
 }
 
@@ -24,6 +25,7 @@ impl TreeView {
 			flattree,
 			cursor: 0,
 			selections: HashMap::new(),
+			root_pid: 0,
 			root_id: 0,
 			stack: Vec::new(),
 			constr: TreeViewConstraints::new()?,
@@ -94,16 +96,22 @@ impl TreeView {
 	}
 
 	pub fn move_into(&mut self) {
-		let Some(&Node { id, .. }) = self.cursor_node() else { return };
+		let Some(&Node { id, pid, .. }) = self.cursor_node() else { return };
 		if self.is_cursor_at_root() { return };
 
-		self.stack.push(self.root_id);
+		self.stack.push((self.root_pid, self.root_id));
+		self.root_pid = pid;
 		self.root_id = id;
 	}
 
 	pub fn move_out(&mut self) {
-		let Some(root_id) = self.stack.pop() else { return };
+		let Some((root_pid, root_id)) = self.stack.pop() else { return };
+		self.root_pid = root_pid;
 		self.root_id = root_id;
+	}
+
+	pub fn root_pid(&self) -> u64 {
+		self.root_pid
 	}
 
 	pub fn root_id(&self) -> u64 {
