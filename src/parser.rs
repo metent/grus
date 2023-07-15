@@ -9,11 +9,11 @@ use winnow::stream::AsChar;
 
 pub fn parse_session(s: &str) -> Result<Session, ParseError<&str, ContextError>> {
 	alt((
-		separated_pair(datetime, tag(" to "), datetime)
+		separated_pair(date_with_opt_time, tag(" to "), date_with_opt_time)
 			.map(|(dt1, dt2)| Session { start: dt1, end: dt2 }),
-		separated_pair(datetime, tag(" to "), time)
+		separated_pair(date_with_opt_time, tag(" to "), time)
 			.map(|(dt, time)| Session { start: dt, end: dt.date().and_time(time) }),
-		separated_pair(time, tag(" to "), datetime).map(|(time, dt)| Session {
+		separated_pair(time, tag(" to "), date_with_opt_time).map(|(time, dt)| Session {
 			start: Local::now().date_naive().and_time(time),
 			end: dt
 		}),
@@ -30,6 +30,13 @@ pub fn parse_datetime(s: &str) -> Result<NaiveDateTime, ParseError<&str, Context
 		time.map(|time| NaiveDateTime::new(Local::now().date_naive(), time)),
 		date.map(|date| NaiveDateTime::new(date, NaiveTime::default())),
 	)).parse(s)
+}
+
+fn date_with_opt_time(s: &mut &str) -> PResult<NaiveDateTime> {
+	alt((
+		datetime,
+		date.map(|date| NaiveDateTime::new(date, NaiveTime::default())),
+	)).parse_next(s)
 }
 
 fn datetime(s: &mut &str) -> PResult<NaiveDateTime> {
